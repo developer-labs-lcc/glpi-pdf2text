@@ -1,0 +1,27 @@
+{
+    "name": "developer-labs/glpi-pdftext",
+    "description": "PDF2Text – copies the text of PDF attachments into GLPI 11 tickets, changes and problems",
+    "type": "glpi-plugin",
+    "license": "GPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "AI & Developer Labs LLC"
+        }
+    ],
+    "require": {
+        "php": ">=8.2",
+        "smalot/pdfparser": "^2.12"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "platform": {
+            "php": "8.2.99"
+        },
+        "sort-packages": true
+    },
+    "autoload": {
+        "psr-4": {
+            "GlpiPlugin\\Pdftext\\": "src/"
+        }
+    }
+}

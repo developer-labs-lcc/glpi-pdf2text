@@ -1,0 +1,48 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: GLPI plugin pdftext 1.0.0\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Run \"composer install --no-dev\" in the plugin directory first."
+msgstr ""
+
+#, php-format
+msgid "Text of the PDF attachment \"%s\""
+msgstr ""
+
+msgid "The text was shortened. The complete text is in the attachment."
+msgstr ""
+
+msgid "The configuration was saved."
+msgstr ""
+
+msgid "PDF2Text"
+msgstr ""
+
+msgid "PDF2Text – configuration"
+msgstr ""
+
+msgid "When a PDF is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. Scanned PDFs without a text layer are skipped."
+msgstr ""
+
+msgid "Add the text to"
+msgstr ""
+
+msgid "Private followup (only visible to technicians)"
+msgstr ""
+
+msgid "Maximum length of the text (characters)"
+msgstr ""
+
+msgid "Path of pdftotext (optional)"
+msgstr ""
+
+msgid "Leave empty to search the usual places. Without pdftotext (package poppler-utils), the built-in PHP parser is used; pdftotext keeps tables and columns better."
+msgstr ""
+
+msgid "Method in use"
+msgstr ""

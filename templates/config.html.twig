@@ -1,0 +1,57 @@
+{#
+ # PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
+ # @copyright Developer Labs LLC
+ # @license   GPL-3.0-or-later – see LICENSE
+ #}
+{{ call('Html::header', [__('PDF2Text', 'pdftext'), '', 'config', 'plugin']) }}
+
+<form method="post" action="{{ action }}" class="card">
+    <div class="card-header"><h3 class="card-title"><i class="ti ti-file-text me-1"></i>{{ __('PDF2Text – configuration', 'pdftext') }}</h3></div>
+    <div class="card-body">
+        <div class="alert alert-info">{{ __('When a PDF is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. Scanned PDFs without a text layer are skipped.', 'pdftext') }}</div>
+
+        <h4>{{ __('Add the text to', 'pdftext') }}</h4>
+        <div class="mb-3">
+            {% for key, label in {
+                on_ticket: _n('Ticket', 'Tickets', 2),
+                on_change: _n('Change', 'Changes', 2),
+                on_problem: _n('Problem', 'Problems', 2),
+            } %}
+                <div class="form-check form-check-inline">
+                    <input type="hidden" name="{{ key }}" value="0">
+                    <input class="form-check-input" type="checkbox" id="pt-{{ key }}" name="{{ key }}" value="1" {{ settings[key] ? 'checked' }}>
+                    <label class="form-check-label" for="pt-{{ key }}">{{ label }}</label>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="form-check form-switch mt-md-4">
+                    <input type="hidden" name="is_private" value="0">
+                    <input class="form-check-input" type="checkbox" id="pt-is_private" name="is_private" value="1" {{ settings.is_private ? 'checked' }}>
+                    <label class="form-check-label" for="pt-is_private">{{ __('Private followup (only visible to technicians)', 'pdftext') }}</label>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="pt-max_chars">{{ __('Maximum length of the text (characters)', 'pdftext') }}</label>
+                <input type="number" min="1000" max="1000000" class="form-control" id="pt-max_chars" name="max_chars" value="{{ settings.max_chars }}">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="pt-pdftotext_path">{{ __('Path of pdftotext (optional)', 'pdftext') }}</label>
+                <input type="text" class="form-control font-monospace" id="pt-pdftotext_path" name="pdftotext_path" value="{{ settings.pdftotext_path }}" placeholder="/usr/bin/pdftotext">
+                <div class="form-hint">{{ __('Leave empty to search the usual places. Without pdftotext (package poppler-utils), the built-in PHP parser is used; pdftotext keeps tables and columns better.', 'pdftext') }}</div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">{{ __('Method in use', 'pdftext') }}</label>
+                <div class="form-control-plaintext font-monospace">{{ method }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="card-footer">
+        <input type="hidden" name="_glpi_csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary"><i class="ti ti-device-floppy me-1"></i>{{ _x('button', 'Save') }}</button>
+    </div>
+</form>
+
+{{ call('Html::footer') }}

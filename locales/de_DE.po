@@ -1,0 +1,48 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: GLPI plugin pdftext 1.0.0\n"
+"Language: de_DE\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Run \"composer install --no-dev\" in the plugin directory first."
+msgstr "Bitte zuerst im Plugin-Verzeichnis \"composer install --no-dev\" ausführen."
+
+#, php-format
+msgid "Text of the PDF attachment \"%s\""
+msgstr "Text des PDF-Anhangs „%s“"
+
+msgid "The text was shortened. The complete text is in the attachment."
+msgstr "Der Text wurde gekürzt. Der vollständige Text steht im Anhang."
+
+msgid "The configuration was saved."
+msgstr "Die Konfiguration wurde gespeichert."
+
+msgid "PDF2Text"
+msgstr "PDF2Text"
+
+msgid "PDF2Text – configuration"
+msgstr "PDF2Text – Konfiguration"
+
+msgid "When a PDF is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. Scanned PDFs without a text layer are skipped."
+msgstr "Wird an ein Ticket, einen Change oder ein Problem ein PDF angehängt (per Mail, Formular oder API), wird sein Text als Folgebeitrag hinzugefügt. So lässt er sich lesen und durchsuchen, ohne die Datei zu öffnen. Gescannte PDFs ohne Textebene werden übersprungen."
+
+msgid "Add the text to"
+msgstr "Text hinzufügen bei"
+
+msgid "Private followup (only visible to technicians)"
+msgstr "Privater Folgebeitrag (nur für Techniker sichtbar)"
+
+msgid "Maximum length of the text (characters)"
+msgstr "Maximale Länge des Textes (Zeichen)"
+
+msgid "Path of pdftotext (optional)"
+msgstr "Pfad zu pdftotext (optional)"
+
+msgid "Leave empty to search the usual places. Without pdftotext (package poppler-utils), the built-in PHP parser is used; pdftotext keeps tables and columns better."
+msgstr "Leer lassen, um die üblichen Orte zu durchsuchen. Ohne pdftotext (Paket poppler-utils) wird der eingebaute PHP-Parser verwendet; pdftotext erhält Tabellen und Spalten besser."
+
+msgid "Method in use"
+msgstr "Verwendete Methode"
