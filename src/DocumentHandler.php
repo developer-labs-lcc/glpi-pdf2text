@@ -47,21 +47,21 @@ final class DocumentHandler
             // Never break the creation of the ticket or followup because of an unreadable PDF.
             Toolbox::logInFile(self::LOG, sprintf(
                 "Document %d: %s\n",
-                (int) ($document_item->fields['documents_id'] ?? 0),
-                $e->getMessage()
+                Cast::int($document_item->fields['documents_id'] ?? 0),
+                $e->getMessage(),
             ));
         }
     }
 
     private static function handle(Document_Item $document_item): void
     {
-        $parent = self::getParent((string) $document_item->fields['itemtype'], (int) $document_item->fields['items_id']);
+        $parent = self::getParent(Cast::string($document_item->fields['itemtype']), Cast::int($document_item->fields['items_id']));
         if ($parent === null || !Settings::isEnabledFor($parent::class)) {
             return;
         }
 
         $document = new Document();
-        if (!$document->getFromDB((int) $document_item->fields['documents_id']) || !self::isPdf($document)) {
+        if (!$document->getFromDB(Cast::int($document_item->fields['documents_id'])) || !self::isPdf($document)) {
             return;
         }
 
@@ -71,8 +71,8 @@ final class DocumentHandler
         }
         self::$done[$key] = true;
 
-        $extractor = new PdfTextExtractor((string) Settings::get('pdftotext_path'));
-        $text      = $extractor->extract(GLPI_DOC_DIR . '/' . $document->fields['filepath']);
+        $extractor = new PdfTextExtractor(Cast::string(Settings::get('pdftotext_path')));
+        $text      = $extractor->extract(GLPI_DOC_DIR . '/' . Cast::string($document->fields['filepath']));
         if ($text === '') {
             // Scanned PDF without text layer: nothing to copy.
             Toolbox::logInFile(self::LOG, sprintf("Document %d: no text layer (scanned PDF?)\n", $document->getID()));
@@ -85,8 +85,8 @@ final class DocumentHandler
         $followup->add([
             'itemtype'      => $parent::class,
             'items_id'      => $parent->getID(),
-            'content'       => self::buildContent((string) $document->fields['filename'], $text, $shortened),
-            'is_private'    => (int) Settings::get('is_private'),
+            'content'       => self::buildContent(Cast::string($document->fields['filename']), $text, $shortened),
+            'is_private'    => Cast::int(Settings::get('is_private')),
             // No mail for this followup: the notification for the ticket or followup itself is enough.
             '_disablenotif' => true,
             // Do not reopen a solved or closed ticket because of the added text.
@@ -110,7 +110,7 @@ final class DocumentHandler
 
         // Followups and solutions store their parent as itemtype + items_id.
         if ($item instanceof ITILFollowup || $item instanceof ITILSolution) {
-            return self::getParent((string) $item->fields['itemtype'], (int) $item->fields['items_id']);
+            return self::getParent(Cast::string($item->fields['itemtype']), Cast::int($item->fields['items_id']));
         }
 
         // Tasks store their parent in a foreign key, e.g. TicketTask::tickets_id.
@@ -118,7 +118,7 @@ final class DocumentHandler
             $parent_type = $item::getItilObjectItemType();
             $foreign_key = getForeignKeyFieldForItemType($parent_type);
 
-            return self::getParent($parent_type, (int) ($item->fields[$foreign_key] ?? 0));
+            return self::getParent($parent_type, Cast::int($item->fields[$foreign_key] ?? 0));
         }
 
         return null;
@@ -127,7 +127,7 @@ final class DocumentHandler
     private static function isPdf(Document $document): bool
     {
         return $document->fields['mime'] === 'application/pdf'
-            || strtolower(pathinfo((string) $document->fields['filename'], PATHINFO_EXTENSION)) === 'pdf';
+            || strtolower(pathinfo(Cast::string($document->fields['filename']), PATHINFO_EXTENSION)) === 'pdf';
     }
 
     /**

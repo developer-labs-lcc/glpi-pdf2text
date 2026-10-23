@@ -9,8 +9,10 @@
 
 namespace GlpiPlugin\Pdftext\Controller;
 
+use Config;
 use Glpi\Controller\AbstractController;
 use Glpi\Exception\Http\AccessDeniedHttpException;
+use GlpiPlugin\Pdftext\Cast;
 use GlpiPlugin\Pdftext\PdfTextExtractor;
 use GlpiPlugin\Pdftext\Settings;
 use Session;
@@ -29,13 +31,13 @@ final class ConfigController extends AbstractController
     #[Route('/config', name: 'config')]
     public function config(Request $request): Response
     {
-        /** @var array $CFG_GLPI */
+        /** @var array<string, mixed> $CFG_GLPI */
         global $CFG_GLPI;
 
-        if (!Session::haveRight('config', UPDATE)) {
+        if (!Session::haveRight(Config::$rightname, UPDATE)) {
             throw new AccessDeniedHttpException();
         }
-        $action = $CFG_GLPI['root_doc'] . '/plugins/pdftext/config';
+        $action = Cast::string($CFG_GLPI['root_doc']) . '/plugins/pdftext/config';
 
         if ($request->getMethod() === 'POST') {
             $values = [
@@ -66,7 +68,22 @@ final class ConfigController extends AbstractController
         return $this->render('@pdftext/config.html.twig', [
             'action'   => $action,
             'settings' => $settings,
-            'method'   => (new PdfTextExtractor((string) $settings['pdftotext_path']))->getMethod(),
+            'method'   => (new PdfTextExtractor(Cast::string($settings['pdftotext_path'])))->getMethod(),
+            'csrf_token' => self::getCsrfToken(),
         ]);
+    }
+
+    /**
+     * GLPI 11 checks a token sent with every form. GLPI 12 checks the origin of the request
+     * instead and no longer needs (or offers) the token.
+     */
+    private static function getCsrfToken(): string
+    {
+        if (version_compare(GLPI_VERSION, '12.0.0-dev', '<')) {
+            // Called by name: the method is deprecated in GLPI 12, where this line is not reached.
+            return Cast::string(call_user_func([Session::class, 'getNewCSRFToken']));
+        }
+
+        return '';
     }
 }

@@ -8,10 +8,18 @@
  */
 
 // Text extraction without GLPI: pdftotext (if installed) and the PHP parser, scanned PDF,
-// unreadable file, normalisation and truncation. Only needs the plugin's vendor/ directory,
-// so it also runs on a host without GLPI: php tests/php/ExtractorTest.php
+// unreadable file, normalisation and truncation. Only needs the plugin's vendor/ directory
+// ("composer install" with dev packages), so it also runs on a host without GLPI:
+// php tests/php/ExtractorTest.php
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
+
+// The Safe library is part of GLPI; outside of GLPI it comes from the dev packages. If the plugin
+// was installed without dev packages inside a GLPI tree, use GLPI's copy.
+$glpi_autoload = dirname(__DIR__, 4) . '/vendor/autoload.php';
+if (!function_exists('Safe\\filesize') && is_readable($glpi_autoload)) {
+    require $glpi_autoload;
+}
 
 use GlpiPlugin\Pdftext\PdfTextExtractor;
 
@@ -62,7 +70,7 @@ try {
 }
 $check(
     'normalise: CRLF, form feed, trailing spaces, empty lines',
-    PdfTextExtractor::normalise("\nA  \r\nB\f\n\n\n\nC\t\n\n") === "A\nB\n\nC"
+    PdfTextExtractor::normalise("\nA  \r\nB\f\n\n\n\nC\t\n\n") === "A\nB\n\nC",
 );
 $check('truncate: short text unchanged', PdfTextExtractor::truncate('äöü', 3) === ['äöü', false]);
 $check('truncate: counts characters, not bytes', PdfTextExtractor::truncate('äöüß', 2) === ['äö', true]);

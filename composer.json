@@ -23,5 +23,8 @@
         "psr-4": {
             "GlpiPlugin\\Pdftext\\": "src/"
         }
+    },
+    "require-dev": {
+        "thecodingmachine/safe": "^3.3"
     }
 }

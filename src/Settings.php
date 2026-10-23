@@ -47,7 +47,7 @@ final class Settings
     public static function get(string $key): mixed
     {
         if (self::$cache === null) {
-            self::$cache = Config::getConfigurationValues(self::CONTEXT) + self::DEFAULTS;
+            self::$cache = self::getStored() + self::DEFAULTS;
         }
 
         return self::$cache[$key] ?? self::DEFAULTS[$key] ?? null;
@@ -55,7 +55,22 @@ final class Settings
 
     public static function getInt(string $key, int $min, int $max): int
     {
-        return max($min, min($max, (int) self::get($key)));
+        return max($min, min($max, Cast::int(self::get($key))));
+    }
+
+    /**
+     * Values stored in the GLPI configuration (without defaults).
+     *
+     * @return array<string, mixed>
+     */
+    public static function getStored(): array
+    {
+        $values = [];
+        foreach (Config::getConfigurationValues(self::CONTEXT) as $name => $value) {
+            $values[(string) $name] = $value;
+        }
+
+        return $values;
     }
 
     /**

@@ -10,9 +10,11 @@
 use Glpi\Plugin\Hooks;
 use GlpiPlugin\Pdftext\DocumentHandler;
 
+/** @phpstan-ignore theCodingMachineSafe.function (safe to assume this isn't already defined) */
 define('PLUGIN_PDFTEXT_VERSION', '1.0.0');
 
 // Minimal GLPI version, inclusive. No upper bound on purpose.
+/** @phpstan-ignore theCodingMachineSafe.function (safe to assume this isn't already defined) */
 define('PLUGIN_PDFTEXT_MIN_GLPI', '11.0.0');
 
 // GLPI only autoloads the plugin's own classes (src/); libraries installed with Composer
@@ -24,10 +26,8 @@ if (is_readable(__DIR__ . '/vendor/autoload.php')) {
 
 function plugin_init_pdftext(): void
 {
-    /** @var array $PLUGIN_HOOKS */
+    /** @var array<string, array<string, mixed>> $PLUGIN_HOOKS */
     global $PLUGIN_HOOKS;
-
-    $PLUGIN_HOOKS[Hooks::CSRF_COMPLIANT]['pdftext'] = true;
 
     if (!Plugin::isPluginActive('pdftext')) {
         return;
@@ -40,11 +40,14 @@ function plugin_init_pdftext(): void
     ];
 
     // Setup > Plugins > PDF2Text
-    if (Session::haveRight('config', UPDATE)) {
+    if (Session::haveRight(Config::$rightname, UPDATE)) {
         $PLUGIN_HOOKS[Hooks::CONFIG_PAGE]['pdftext'] = 'config';
     }
 }
 
+/**
+ * @return array<string, mixed>
+ */
 function plugin_version_pdftext(): array
 {
     return [
@@ -75,7 +78,7 @@ function plugin_pdftext_check_prerequisites(): bool
     return true;
 }
 
-function plugin_pdftext_check_config($verbose = false): bool
+function plugin_pdftext_check_config(bool $verbose = false): bool
 {
     return true;
 }

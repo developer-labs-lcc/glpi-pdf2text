@@ -12,7 +12,7 @@ use GlpiPlugin\Pdftext\Settings;
 function plugin_pdftext_install(): bool
 {
     // Store the defaults once, without overwriting values of an earlier installation.
-    Settings::set(Config::getConfigurationValues(Settings::CONTEXT) + Settings::DEFAULTS);
+    Settings::set(Settings::getStored() + Settings::DEFAULTS);
 
     return true;
 }

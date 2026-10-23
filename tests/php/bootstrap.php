@@ -1,5 +1,7 @@
 <?php
 
+use Glpi\Kernel\Kernel;
+
 /**
  * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
  *
@@ -11,10 +13,14 @@
 // (default: glpi). Tests run against the database of this GLPI instance: they only delete
 // records they created themselves (see track() / finish()). The plugin must be active.
 
+// The test output is buffered (printed at the end): GLPI's page header sends HTTP headers, which
+// is only possible while nothing has been printed yet.
+ob_start();
+
 $glpi_root = dirname(__DIR__, 4);
 chdir($glpi_root);
 require $glpi_root . '/vendor/autoload.php';
-$kernel = new \Glpi\Kernel\Kernel('production');
+$kernel = new Kernel('production');
 $kernel->boot();
 
 $login = $argv[1] ?? 'glpi';

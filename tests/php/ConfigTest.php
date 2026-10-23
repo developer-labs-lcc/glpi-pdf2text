@@ -1,0 +1,61 @@
+<?php
+
+/**
+ * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
+ *
+ * @copyright Developer Labs LLC
+ * @license   GPL-3.0-or-later – see LICENSE
+ */
+
+// Configuration page: rendering, CSRF token field only where GLPI uses tokens (GLPI 11, not 12),
+// saving with validation, access check. The plugin settings are restored at the end.
+
+require __DIR__ . '/bootstrap.php';
+
+use Glpi\Exception\Http\AccessDeniedHttpException;
+use GlpiPlugin\Pdftext\Controller\ConfigController;
+use GlpiPlugin\Pdftext\Settings;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Symfony\Component\HttpFoundation\Request;
+
+$original_settings = [];
+foreach (array_keys(Settings::DEFAULTS) as $key) {
+    $original_settings[$key] = Settings::get($key);
+}
+register_shutdown_function(static fn() => Settings::set($original_settings));
+$controller = new ConfigController();
+
+section('page');
+$GLOBALS['HEADER_LOADED'] = false;
+ob_start();
+$response = $controller->config(Request::create('/plugins/pdftext/config', 'GET'));
+$html = ob_get_clean() . $response->getContent();
+check('page rendered', $response->getStatusCode() === 200 && str_contains($html, 'name="max_chars"'));
+$uses_token = version_compare(GLPI_VERSION, '12.0.0-dev', '<');
+// value="..." with at least one character: a real token
+$has_token = preg_match('/name="_glpi_csrf_token" value="[^"]+"/', $html) === 1;
+check('CSRF token field ' . ($uses_token ? 'present (GLPI 11)' : 'absent (GLPI 12)'), $has_token === $uses_token, GLPI_VERSION);
+
+section('saving');
+$response = $controller->config(Request::create('/plugins/pdftext/config', 'POST', [
+    'on_ticket' => '1', 'on_change' => '0', 'on_problem' => '1',
+    'is_private' => '0', 'max_chars' => '5', 'pdftotext_path' => 'relative/path',
+]));
+Settings::reset();
+check('redirect after saving', $response instanceof RedirectResponse);
+check('values saved', Settings::get('on_change') == 0 && Settings::get('is_private') == 0);
+check('maximum length kept within limits', (int) Settings::get('max_chars') === 1000);
+check('relative pdftotext path rejected', Settings::get('pdftotext_path') === '');
+
+section('access');
+$rights = $_SESSION['glpiactiveprofile']['config'];
+$_SESSION['glpiactiveprofile']['config'] = READ;
+try {
+    $controller->config(Request::create('/plugins/pdftext/config', 'GET'));
+    check('without the right to change the configuration: denied', false);
+} catch (AccessDeniedHttpException) {
+    check('without the right to change the configuration: denied', true);
+}
+$_SESSION['glpiactiveprofile']['config'] = $rights;
+
+finish();

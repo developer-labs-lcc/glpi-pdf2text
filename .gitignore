@@ -1,0 +1,6 @@
+# Installed with "composer install"; release archives contain them (tools/release.sh).
+vendor/
+# Caches of the code style and analysis tools
+var/
+# Release archives built by tools/release.sh
+dist/

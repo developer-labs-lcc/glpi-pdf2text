@@ -13,6 +13,13 @@ use RuntimeException;
 use Smalot\PdfParser\Parser;
 use Throwable;
 
+use function Safe\fclose;
+use function Safe\filesize;
+use function Safe\preg_replace;
+use function Safe\proc_close;
+use function Safe\stream_get_contents;
+use function Safe\stream_set_blocking;
+
 /**
  * Reads the text layer of a PDF file.
  *
@@ -40,9 +47,7 @@ final class PdfTextExtractor
     /**
      * @param string $pdftotext_path configured path of pdftotext; empty = auto-detect
      */
-    public function __construct(private readonly string $pdftotext_path = '')
-    {
-    }
+    public function __construct(private readonly string $pdftotext_path = '') {}
 
     /**
      * Returns the normalised text of the PDF, or an empty string if it has no text layer.
@@ -89,42 +94,47 @@ final class PdfTextExtractor
     {
         // Array form of proc_open: no shell is involved, so file names need no escaping.
         // -layout keeps columns and tables readable, "-" writes the text to stdout.
-        $process = proc_open(
+        // PHP's own proc_open() is used on purpose: the type declaration of Safe\proc_open()
+        // only accepts a command string, which would need a shell.
+        /** @phpstan-ignore theCodingMachineSafe.function (array command, result checked below) */
+        $process = \proc_open(
             [$binary, '-layout', '-enc', 'UTF-8', '-q', $file, '-'],
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-            $pipes
+            $pipes,
         );
-        if (!is_resource($process)) {
+        $stdout = $pipes[1] ?? null;
+        $stderr = $pipes[2] ?? null;
+        if (!is_resource($process) || !is_resource($stdout) || !is_resource($stderr)) {
             throw new RuntimeException('pdftotext could not be started.');
         }
 
         // Read without blocking so that a hanging pdftotext can be stopped after TIMEOUT seconds.
-        stream_set_blocking($pipes[1], false);
-        stream_set_blocking($pipes[2], false);
+        stream_set_blocking($stdout, false);
+        stream_set_blocking($stderr, false);
         $output   = '';
         $errors   = '';
         $deadline = microtime(true) + self::TIMEOUT;
         while (true) {
-            $output .= (string) stream_get_contents($pipes[1]);
-            $errors .= (string) stream_get_contents($pipes[2]);
+            $output .= stream_get_contents($stdout);
+            $errors .= stream_get_contents($stderr);
             $status = proc_get_status($process);
             if (!$status['running']) {
                 break;
             }
             if (microtime(true) > $deadline) {
                 proc_terminate($process);
-                fclose($pipes[1]);
-                fclose($pipes[2]);
+                fclose($stdout);
+                fclose($stderr);
                 proc_close($process);
                 throw new RuntimeException(sprintf('pdftotext did not finish within %d seconds.', self::TIMEOUT));
             }
             usleep(20000);
         }
         // Collect what was written between the last read and the end of the process.
-        $output .= (string) stream_get_contents($pipes[1]);
-        $errors .= (string) stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
+        $output .= stream_get_contents($stdout);
+        $errors .= stream_get_contents($stderr);
+        fclose($stdout);
+        fclose($stderr);
         proc_close($process);
 
         // proc_get_status() reports the exit code only once, in the call that sees the end.
@@ -157,9 +167,9 @@ final class PdfTextExtractor
         $text = mb_scrub($text, 'UTF-8');
         $text = str_replace(["\r\n", "\r", "\f"], ["\n", "\n", "\n"], $text);
         // Remove spaces and tabs at the end of every line (m = ^/$ match at each line).
-        $text = (string) preg_replace('/[ \t]+$/m', '', $text);
+        $text = preg_replace('/[ \t]+$/m', '', $text);
         // Three or more line breaks in a row (= two or more empty lines) become one empty line.
-        $text = (string) preg_replace('/\n{3,}/', "\n\n", $text);
+        $text = preg_replace('/\n{3,}/', "\n\n", $text);
 
         return trim($text, "\n");
     }

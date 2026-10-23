@@ -28,20 +28,32 @@ the PDF text) or the global search.
 
 ## Requirements
 
-- GLPI 11.0 or later
+- GLPI 11.0 or later (tested with 11.0.9 and 12.0.0)
 - PHP 8.2 or later
 - Recommended: `pdftotext` (`apt install poppler-utils` / `dnf install poppler-utils`)
 
 ## Installation
 
+Easiest: download a release archive from the
+[releases](https://github.com/developer-labs-lcc/glpi-pdf2text/releases), with all dependencies:
+
+- `pdftext.zip`: copy it into your GLPI `plugins` directory and unpack it there by double-click
+  (or `unzip pdftext.zip -d pdftext`). The files are directly in the ZIP, so the new directory
+  is named after the file: `plugins/pdftext`.
+- `glpi-pdftext-<version>.tar.bz2`: contains the directory `pdftext`; unpack it in the `plugins`
+  directory (`tar -xjf glpi-pdftext-<version>.tar.bz2`).
+
+From the source code:
+
 ```sh
 cd /var/www/glpi/plugins            # your GLPI plugins directory
-git clone <repository-url> pdftext  # or unpack the release archive as "pdftext"
+git clone https://github.com/developer-labs-lcc/glpi-pdf2text.git pdftext
 cd pdftext
-composer install --no-dev           # not needed for release archives that contain vendor/
+composer install --no-dev
 ```
 
-Then enable the plugin in **Setup > Plugins** (install, then enable).
+The directory must be named `pdftext` (the technical key of the plugin). Then enable the plugin in
+**Setup > Plugins** (install, then enable).
 
 ## Configuration
 
@@ -61,6 +73,38 @@ The page also shows which method (pdftotext or PHP parser) is in use.
 - PDFs attached **before** the plugin was enabled are not processed.
 - The PHP parser only reads files up to 20 MB; larger ones need `pdftotext`.
 - `pdftotext` is stopped after 30 seconds.
+- PDFs that need a password to open, and other file types (Word, images, ...), are not read.
+
+## Development
+
+Tests (`composer install` with dev packages first):
+
+```sh
+tests/run.sh                 # all tests; the GLPI tests need the plugin installed and active
+php tests/php/ExtractorTest.php   # text extraction only, also runs without GLPI
+```
+
+`HandlerTest` boots GLPI and creates its own tickets, changes and documents in the database of the
+instance, and purges them at the end. `ConfigTest` checks the configuration page (saving, access,
+CSRF token field only on GLPI 11) and restores the settings afterwards.
+
+Code style and static analysis follow Teclib's plugin template. They need the plugin in the
+`plugins/pdftext` directory of a GLPI development checkout (`composer install` in GLPI):
+
+```sh
+../../vendor/bin/php-cs-fixer fix --dry-run --diff
+../../vendor/bin/phpstan analyse
+```
+
+### Release
+
+1. Raise the version in `setup.php` (`PLUGIN_PDFTEXT_VERSION`), add it to `pdftext.xml`
+   (`<version>` with `<download_url>`) and describe it in `CHANGELOG.md`.
+2. `tools/release.sh` builds `dist/glpi-pdftext-<version>.tar.bz2` and, with the same content
+   but without the parent directory, `dist/pdftext.zip`.
+3. Create a GitHub release with the tag `<version>` and attach both archives.
+
+The plugin catalog reads `pdftext.xml` from the `main` branch.
 
 ## License
 
