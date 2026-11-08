@@ -7,14 +7,14 @@
  * @license   GPL-3.0-or-later – see LICENSE
  */
 
-namespace GlpiPlugin\Pdftext\Controller;
+namespace GlpiPlugin\Pdf2text\Controller;
 
 use Config;
 use Glpi\Controller\AbstractController;
 use Glpi\Exception\Http\AccessDeniedHttpException;
-use GlpiPlugin\Pdftext\Cast;
-use GlpiPlugin\Pdftext\PdfTextExtractor;
-use GlpiPlugin\Pdftext\Settings;
+use GlpiPlugin\Pdf2text\Cast;
+use GlpiPlugin\Pdf2text\PdfTextExtractor;
+use GlpiPlugin\Pdf2text\Settings;
 use Session;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -37,7 +37,7 @@ final class ConfigController extends AbstractController
         if (!Session::haveRight(Config::$rightname, UPDATE)) {
             throw new AccessDeniedHttpException();
         }
-        $action = Cast::string($CFG_GLPI['root_doc']) . '/plugins/pdftext/config';
+        $action = Cast::string($CFG_GLPI['root_doc']) . '/plugins/pdf2text/config';
 
         if ($request->getMethod() === 'POST') {
             $values = [
@@ -52,7 +52,7 @@ final class ConfigController extends AbstractController
             $values['pdftotext_path'] = str_starts_with($path, '/') ? mb_substr($path, 0, 255) : '';
 
             Settings::set($values);
-            Session::addMessageAfterRedirect(__('The configuration was saved.', 'pdftext'));
+            Session::addMessageAfterRedirect(__('The configuration was saved.', 'pdf2text'));
 
             return new RedirectResponse($action);
         }
@@ -65,7 +65,7 @@ final class ConfigController extends AbstractController
             $settings[$key] = Settings::get($key);
         }
 
-        return $this->render('@pdftext/config.html.twig', [
+        return $this->render('@pdf2text/config.html.twig', [
             'action'   => $action,
             'settings' => $settings,
             'method'   => (new PdfTextExtractor(Cast::string($settings['pdftotext_path'])))->getMethod(),

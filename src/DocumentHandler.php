@@ -7,7 +7,7 @@
  * @license   GPL-3.0-or-later – see LICENSE
  */
 
-namespace GlpiPlugin\Pdftext;
+namespace GlpiPlugin\Pdf2text;
 
 use CommonITILObject;
 use CommonITILTask;
@@ -29,7 +29,7 @@ use Toolbox;
 final class DocumentHandler
 {
     /** Name of the log file in files/_log (without ".log"). */
-    private const LOG = 'pdftext';
+    private const LOG = 'pdf2text';
 
     /**
      * Document/item pairs handled in this request, so that a PDF linked twice to the same
@@ -136,10 +136,10 @@ final class DocumentHandler
      */
     private static function buildContent(string $filename, string $text, bool $shortened): string
     {
-        $html = '<p><strong>' . htmlescape(sprintf(__('Text of the PDF attachment "%s"', 'pdftext'), $filename)) . '</strong></p>'
+        $html = '<p><strong>' . htmlescape(sprintf(__('Text of the PDF attachment "%s"', 'pdf2text'), $filename)) . '</strong></p>'
             . '<pre>' . htmlescape($text) . '</pre>';
         if ($shortened) {
-            $html .= '<p><em>' . htmlescape(__('The text was shortened. The complete text is in the attachment.', 'pdftext')) . '</em></p>';
+            $html .= '<p><em>' . htmlescape(__('The text was shortened. The complete text is in the attachment.', 'pdf2text')) . '</em></p>';
         }
 
         return $html;

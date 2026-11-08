@@ -13,8 +13,8 @@
 require __DIR__ . '/bootstrap.php';
 
 use Glpi\Exception\Http\AccessDeniedHttpException;
-use GlpiPlugin\Pdftext\Controller\ConfigController;
-use GlpiPlugin\Pdftext\Settings;
+use GlpiPlugin\Pdf2text\Controller\ConfigController;
+use GlpiPlugin\Pdf2text\Settings;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -28,7 +28,7 @@ $controller = new ConfigController();
 section('page');
 $GLOBALS['HEADER_LOADED'] = false;
 ob_start();
-$response = $controller->config(Request::create('/plugins/pdftext/config', 'GET'));
+$response = $controller->config(Request::create('/plugins/pdf2text/config', 'GET'));
 $html = ob_get_clean() . $response->getContent();
 check('page rendered', $response->getStatusCode() === 200 && str_contains($html, 'name="max_chars"'));
 $uses_token = version_compare(GLPI_VERSION, '12.0.0-dev', '<');
@@ -37,7 +37,7 @@ $has_token = preg_match('/name="_glpi_csrf_token" value="[^"]+"/', $html) === 1;
 check('CSRF token field ' . ($uses_token ? 'present (GLPI 11)' : 'absent (GLPI 12)'), $has_token === $uses_token, GLPI_VERSION);
 
 section('saving');
-$response = $controller->config(Request::create('/plugins/pdftext/config', 'POST', [
+$response = $controller->config(Request::create('/plugins/pdf2text/config', 'POST', [
     'on_ticket' => '1', 'on_change' => '0', 'on_problem' => '1',
     'is_private' => '0', 'max_chars' => '5', 'pdftotext_path' => 'relative/path',
 ]));
@@ -51,7 +51,7 @@ section('access');
 $rights = $_SESSION['glpiactiveprofile']['config'];
 $_SESSION['glpiactiveprofile']['config'] = READ;
 try {
-    $controller->config(Request::create('/plugins/pdftext/config', 'GET'));
+    $controller->config(Request::create('/plugins/pdf2text/config', 'GET'));
     check('without the right to change the configuration: denied', false);
 } catch (AccessDeniedHttpException) {
     check('without the right to change the configuration: denied', true);

@@ -7,7 +7,7 @@
  * @license   GPL-3.0-or-later – see LICENSE
  */
 
-namespace GlpiPlugin\Pdftext;
+namespace GlpiPlugin\Pdf2text;
 
 use Change;
 use Config;
@@ -15,12 +15,12 @@ use Problem;
 use Ticket;
 
 /**
- * Plugin settings, stored with GLPI's configuration API (context "plugin:pdftext").
+ * Plugin settings, stored with GLPI's configuration API (context "plugin:pdf2text").
  * Only users with the right to change the GLPI configuration can edit them.
  */
 final class Settings
 {
-    public const CONTEXT = 'plugin:pdftext';
+    public const CONTEXT = 'plugin:pdf2text';
 
     /** ITIL object types the text can be added to (key = setting name). */
     public const ITEMTYPES = [

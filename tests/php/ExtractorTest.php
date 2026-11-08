@@ -21,7 +21,7 @@ if (!function_exists('Safe\\filesize') && is_readable($glpi_autoload)) {
     require $glpi_autoload;
 }
 
-use GlpiPlugin\Pdftext\PdfTextExtractor;
+use GlpiPlugin\Pdf2text\PdfTextExtractor;
 
 $fail  = 0;
 $check = static function (string $label, bool $cond, string $extra = '') use (&$fail): void {
@@ -49,7 +49,7 @@ foreach ($methods as $name => $extractor) {
     $check('no page break characters', !str_contains($text, "\f"));
     $check('scanned PDF gives empty text', $extractor->extract($fixtures . 'scan.pdf') === '');
 
-    $broken = tempnam(sys_get_temp_dir(), 'pdftext');
+    $broken = tempnam(sys_get_temp_dir(), 'pdf2text');
     file_put_contents($broken, "%PDF-1.4\nthis is not a real PDF\n");
     try {
         $extractor->extract($broken);

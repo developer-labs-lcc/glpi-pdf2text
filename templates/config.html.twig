@@ -3,14 +3,14 @@
  # @copyright Developer Labs LLC
  # @license   GPL-3.0-or-later – see LICENSE
  #}
-{{ call('Html::header', [__('PDF2Text', 'pdftext'), '', 'config', 'plugin']) }}
+{{ call('Html::header', [__('PDF2Text', 'pdf2text'), '', 'config', 'plugin']) }}
 
 <form method="post" action="{{ action }}" class="card">
-    <div class="card-header"><h3 class="card-title"><i class="ti ti-file-text me-1"></i>{{ __('PDF2Text – configuration', 'pdftext') }}</h3></div>
+    <div class="card-header"><h3 class="card-title"><i class="ti ti-file-text me-1"></i>{{ __('PDF2Text – configuration', 'pdf2text') }}</h3></div>
     <div class="card-body">
-        <div class="alert alert-info">{{ __('When a PDF is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. Scanned PDFs without a text layer are skipped.', 'pdftext') }}</div>
+        <div class="alert alert-info">{{ __('When a PDF is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. Scanned PDFs without a text layer are skipped.', 'pdf2text') }}</div>
 
-        <h4>{{ __('Add the text to', 'pdftext') }}</h4>
+        <h4>{{ __('Add the text to', 'pdf2text') }}</h4>
         <div class="mb-3">
             {% for key, label in {
                 on_ticket: _n('Ticket', 'Tickets', 2),
@@ -30,20 +30,20 @@
                 <div class="form-check form-switch mt-md-4">
                     <input type="hidden" name="is_private" value="0">
                     <input class="form-check-input" type="checkbox" id="pt-is_private" name="is_private" value="1" {{ settings.is_private ? 'checked' }}>
-                    <label class="form-check-label" for="pt-is_private">{{ __('Private followup (only visible to technicians)', 'pdftext') }}</label>
+                    <label class="form-check-label" for="pt-is_private">{{ __('Private followup (only visible to technicians)', 'pdf2text') }}</label>
                 </div>
             </div>
             <div class="col-md-6">
-                <label class="form-label" for="pt-max_chars">{{ __('Maximum length of the text (characters)', 'pdftext') }}</label>
+                <label class="form-label" for="pt-max_chars">{{ __('Maximum length of the text (characters)', 'pdf2text') }}</label>
                 <input type="number" min="1000" max="1000000" class="form-control" id="pt-max_chars" name="max_chars" value="{{ settings.max_chars }}">
             </div>
             <div class="col-md-6">
-                <label class="form-label" for="pt-pdftotext_path">{{ __('Path of pdftotext (optional)', 'pdftext') }}</label>
+                <label class="form-label" for="pt-pdftotext_path">{{ __('Path of pdftotext (optional)', 'pdf2text') }}</label>
                 <input type="text" class="form-control font-monospace" id="pt-pdftotext_path" name="pdftotext_path" value="{{ settings.pdftotext_path }}" placeholder="/usr/bin/pdftotext">
-                <div class="form-hint">{{ __('Leave empty to search the usual places. Without pdftotext (package poppler-utils), the built-in PHP parser is used; pdftotext keeps tables and columns better.', 'pdftext') }}</div>
+                <div class="form-hint">{{ __('Leave empty to search the usual places. Without pdftotext (package poppler-utils), the built-in PHP parser is used; pdftotext keeps tables and columns better.', 'pdf2text') }}</div>
             </div>
             <div class="col-md-6">
-                <label class="form-label">{{ __('Method in use', 'pdftext') }}</label>
+                <label class="form-label">{{ __('Method in use', 'pdf2text') }}</label>
                 <div class="form-control-plaintext font-monospace">{{ method }}</div>
             </div>
         </div>

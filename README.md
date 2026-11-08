@@ -20,7 +20,7 @@ creates the ticket, and the plugin adds the text of the PDF as a followup.
   hosting without shell access.
 - **Scanned PDFs** (images without a text layer) are skipped – there is no OCR.
 - The followup does **not** send notifications and does **not** reopen solved tickets.
-- Problems (unreadable or broken PDFs) are logged to `files/_log/pdftext.log`; the ticket is
+- Problems (unreadable or broken PDFs) are logged to `files/_log/pdf2text.log`; the ticket is
   created in any case.
 
 Searching: in the ticket list, use the search criterion **Followups > Description** (it contains
@@ -37,22 +37,22 @@ the PDF text) or the global search.
 Easiest: download a release archive from the
 [releases](https://github.com/developer-labs-lcc/glpi-pdf2text/releases), with all dependencies:
 
-- `pdftext.zip`: copy it into your GLPI `plugins` directory and unpack it there by double-click
-  (or `unzip pdftext.zip -d pdftext`). The files are directly in the ZIP, so the new directory
-  is named after the file: `plugins/pdftext`.
-- `glpi-pdftext-<version>.tar.bz2`: contains the directory `pdftext`; unpack it in the `plugins`
-  directory (`tar -xjf glpi-pdftext-<version>.tar.bz2`).
+- `pdf2text.zip`: copy it into your GLPI `plugins` directory and unpack it there by double-click
+  (or `unzip pdf2text.zip -d pdf2text`). The files are directly in the ZIP, so the new directory
+  is named after the file: `plugins/pdf2text`.
+- `glpi-pdf2text-<version>.tar.bz2`: contains the directory `pdf2text`; unpack it in the `plugins`
+  directory (`tar -xjf glpi-pdf2text-<version>.tar.bz2`).
 
 From the source code:
 
 ```sh
 cd /var/www/glpi/plugins            # your GLPI plugins directory
-git clone https://github.com/developer-labs-lcc/glpi-pdf2text.git pdftext
-cd pdftext
+git clone https://github.com/developer-labs-lcc/glpi-pdf2text.git pdf2text
+cd pdf2text
 composer install --no-dev
 ```
 
-The directory must be named `pdftext` (the technical key of the plugin). Then enable the plugin in
+The directory must be named `pdf2text` (the technical key of the plugin). Then enable the plugin in
 **Setup > Plugins** (install, then enable).
 
 ## Configuration
@@ -89,7 +89,7 @@ instance, and purges them at the end. `ConfigTest` checks the configuration page
 CSRF token field only on GLPI 11) and restores the settings afterwards.
 
 Code style and static analysis follow Teclib's plugin template. They need the plugin in the
-`plugins/pdftext` directory of a GLPI development checkout (`composer install` in GLPI):
+`plugins/pdf2text` directory of a GLPI development checkout (`composer install` in GLPI):
 
 ```sh
 ../../vendor/bin/php-cs-fixer fix --dry-run --diff
@@ -98,13 +98,13 @@ Code style and static analysis follow Teclib's plugin template. They need the pl
 
 ### Release
 
-1. Raise the version in `setup.php` (`PLUGIN_PDFTEXT_VERSION`), add it to `pdftext.xml`
+1. Raise the version in `setup.php` (`PLUGIN_PDF2TEXT_VERSION`), add it to `pdf2text.xml`
    (`<version>` with `<download_url>`) and describe it in `CHANGELOG.md`.
-2. `tools/release.sh` builds `dist/glpi-pdftext-<version>.tar.bz2` and, with the same content
-   but without the parent directory, `dist/pdftext.zip`.
+2. `tools/release.sh` builds `dist/glpi-pdf2text-<version>.tar.bz2` and, with the same content
+   but without the parent directory, `dist/pdf2text.zip`.
 3. Create a GitHub release with the tag `<version>` and attach both archives.
 
-The plugin catalog reads `pdftext.xml` from the `main` branch.
+The plugin catalog reads `pdf2text.xml` from the `main` branch.
 
 ## License
 

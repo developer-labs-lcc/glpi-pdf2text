@@ -15,8 +15,8 @@
 
 require __DIR__ . '/bootstrap.php';
 
-use GlpiPlugin\Pdftext\DocumentHandler;
-use GlpiPlugin\Pdftext\Settings;
+use GlpiPlugin\Pdf2text\DocumentHandler;
+use GlpiPlugin\Pdf2text\Settings;
 
 $rid = run_id();
 $original_settings = [];
@@ -66,7 +66,7 @@ $search = Search::getDatas(Ticket::class, [
 check('ticket found with "Followups > Description" = PDF text', (int) $search['data']['totalcount'] === 1, (string) $search['data']['totalcount']);
 
 section('attachments without text');
-$log      = GLPI_LOG_DIR . '/pdftext.log';
+$log      = GLPI_LOG_DIR . '/pdf2text.log';
 $log_size = is_file($log) ? filesize($log) : 0;
 $scan     = $create(Ticket::class, 'Scan ticket', ['scan.pdf']);
 check('scanned PDF: no followup', count(pdf_followups($scan)) === 0);

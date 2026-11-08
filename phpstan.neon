@@ -1,4 +1,4 @@
-# Static analysis as in Teclib's plugin template; needs a GLPI development checkout (plugins/pdftext).
+# Static analysis as in Teclib's plugin template; needs a GLPI development checkout (plugins/pdf2text).
 includes:
     - ../../vendor/glpi-project/phpstan-glpi/extension.neon
     - ../../vendor/phpstan/phpstan-deprecation-rules/rules.neon

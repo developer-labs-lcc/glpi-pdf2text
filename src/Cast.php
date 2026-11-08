@@ -7,7 +7,7 @@
  * @license   GPL-3.0-or-later – see LICENSE
  */
 
-namespace GlpiPlugin\Pdftext;
+namespace GlpiPlugin\Pdf2text;
 
 /**
  * Type-safe conversion of untyped values (fields of GLPI items, configuration values).

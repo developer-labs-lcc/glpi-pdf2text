@@ -7,7 +7,7 @@
  * @license   GPL-3.0-or-later – see LICENSE
  */
 
-namespace GlpiPlugin\Pdftext;
+namespace GlpiPlugin\Pdf2text;
 
 use RuntimeException;
 use Smalot\PdfParser\Parser;

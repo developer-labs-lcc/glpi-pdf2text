@@ -41,8 +41,8 @@ foreach (Plugin::getPlugins() as $key) {
         call_user_func("plugin_init_$key");
     }
 }
-if (!Plugin::isPluginActive('pdftext')) {
-    fwrite(STDERR, "plugin pdftext is not active\n");
+if (!Plugin::isPluginActive('pdf2text')) {
+    fwrite(STDERR, "plugin pdf2text is not active\n");
     exit(1);
 }
 

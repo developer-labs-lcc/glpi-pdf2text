@@ -1,6 +1,6 @@
 <root>
    <name>PDF2Text</name>
-   <key>pdftext</key>
+   <key>pdf2text</key>
    <state>stable</state>
    <logo>https://raw.githubusercontent.com/developer-labs-lcc/glpi-pdf2text/main/pics/logo_40.png</logo>
    <description>
@@ -47,7 +47,7 @@
       <version>
          <num>1.0.0</num>
          <compatibility>~11.0.0 || ~12.0.0</compatibility>
-         <download_url>https://github.com/developer-labs-lcc/glpi-pdf2text/releases/download/1.0.0/glpi-pdftext-1.0.0.tar.bz2</download_url>
+         <download_url>https://github.com/developer-labs-lcc/glpi-pdf2text/releases/download/1.0.0/glpi-pdf2text-1.0.0.tar.bz2</download_url>
       </version>
    </versions>
    <langs>
