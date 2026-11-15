@@ -4,3 +4,15 @@ vendor/
 var/
 # Release archives built by tools/release.sh
 dist/
+
+# --- taken over from the common .gitignore of developer-labs-lcc/plugins (split 2026-11-15)
+dist/
+node_modules/
+trademark/
+vendor/
+.gh_token
+composer.lock
+*.min.*
+# temporary and conflict files of the Unison file sync
+.unison.*
+*(conflict_on_*)*
