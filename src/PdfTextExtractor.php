@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.2
+ * @version   1.1.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -19,6 +19,7 @@ use Throwable;
 
 use function Safe\fclose;
 use function Safe\filesize;
+use function Safe\ini_get;
 use function Safe\preg_replace;
 use function Safe\proc_close;
 use function Safe\stream_get_contents;
@@ -47,6 +48,9 @@ final class PdfTextExtractor
 
     /** Larger files are not given to the PHP parser, it keeps the whole file in memory. */
     private const PHP_PARSER_MAX_BYTES = 20 * 1024 * 1024;
+
+    /** Memory the PHP parser needs, as a multiple of the size of the PDF (rough, on the safe side). */
+    private const PHP_PARSER_MEMORY_FACTOR = 15;
 
     /**
      * @param string $pdftotext_path configured path of pdftotext; empty = auto-detect
@@ -155,11 +159,48 @@ final class PdfTextExtractor
             throw new RuntimeException('The PDF is too large for the PHP parser; install pdftotext (poppler-utils).');
         }
 
+        // The parser keeps the file and its objects in memory, many times the size of the file
+        self::ensureMemory(filesize($file) * self::PHP_PARSER_MEMORY_FACTOR);
         try {
             return (new Parser())->parseFile($file)->getText();
         } catch (Throwable $e) {
             throw new RuntimeException('The PDF could not be parsed: ' . $e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * Throws if fewer than $bytes of memory are left below PHP's memory_limit. Running out of
+     * memory ends PHP at once (no exception, nothing can catch it): in the mail collector, the
+     * mail would not be finished and could be imported again. So a file that would need too much
+     * is skipped and logged instead.
+     *
+     * @throws RuntimeException if the memory is not enough
+     */
+    public static function ensureMemory(int $bytes): void
+    {
+        $limit = self::bytes((string) ini_get('memory_limit'));
+        if ($limit > 0 && memory_get_usage(true) + $bytes > $limit) {
+            throw new RuntimeException(sprintf('Not enough memory to read the file (about %d MB needed, memory_limit %s).', (int) ceil($bytes / 1048576), (string) ini_get('memory_limit')));
+        }
+    }
+
+    /**
+     * Bytes of a PHP size setting such as "256M", "1G" or "-1" (no limit: 0 is returned).
+     */
+    private static function bytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '' || $value === '-1') {
+            return 0;
+        }
+        $number = (int) $value;
+        // Last character: K, M or G (any case) multiplies by 1024, 1024² or 1024³
+        return match (strtoupper(substr($value, -1))) {
+            'G'     => $number * 1024 ** 3,
+            'M'     => $number * 1024 ** 2,
+            'K'     => $number * 1024,
+            default => $number,
+        };
     }
 
     /**

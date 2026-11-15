@@ -83,20 +83,32 @@ foreach ([OfficeTextExtractor::DOCX, OfficeTextExtractor::ODT] as $format) {
     $check('paragraphs separated by an empty line', str_contains($text, "Zürich\n\nKey"));
     $check(
         'bullets, nested numbered list, numbered list starting at 1',
-        str_contains($text, "• Bullet one\n  1. Sub step A\n  2. Sub step B\n• Bullet two\n1. Numbered one\n2. Numbered two"),
+        str_contains($text, "• Bullet one\n  1. Sub step A\n  2. Sub step B\n• Bullet two\n") && str_contains($text, "1. Numbered one\n2. Numbered two\n"),
         $text,
     );
 
     $blocks = $office->extractBlocks($fixtures . 'change.' . $format, $format);
     [$html, $short] = OfficeTextExtractor::toHtml($blocks, 100000);
     $check('HTML: headings', str_contains($html, '<h3>Change Notification CN-2026-0815</h3>') && str_contains($html, '<h4>Steps</h4>'), $html);
-    $check('HTML: nested lists', str_contains($html, '<ul><li>Bullet one<ol><li>Sub step A</li><li>Sub step B</li></ol></li><li>Bullet two</li></ul><ol><li>Numbered one</li><li>Numbered two</li></ol>'));
+    $check('HTML: nested lists', str_contains($html, '<ul><li>Bullet one<ol><li>Sub step A</li><li>Sub step B</li></ol></li><li>Bullet two</li></ul>')
+        && str_contains($html, '<ol><li>Numbered one</li><li>Numbered two</li></ol>'), $html);
+    $check('list interrupted by a paragraph counts on (3.)', str_contains($text, "Between the lists\n\n3. Numbered three")
+        && str_contains($html, '<p>Between the lists</p><ol start="3"><li>Numbered three</li></ol>'));
+    $check('text box in a table cell read once', substr_count($text, 'CELLBOX') === 1 && str_contains($text, "Cell with box: CELLBOX\tx"), $text);
     $check('HTML: table, escaped text, line break', str_contains($html, '<td>Core router R1</td><td>Outage 15 min</td>') && str_contains($html, 'Kärnten &amp; Zürich') && str_contains($html, 'Value<br>second line'));
     $check('HTML: not shortened', !$short);
     [$html, $short] = OfficeTextExtractor::toHtml($blocks, 80);
     $check('HTML: shortened to the maximum length, lists closed', $short && !str_contains($html, 'OKAPI') && substr_count($html, '<ul>') === substr_count($html, '</ul>'), $html);
 }
 $check('DOCX: text box read once (no copy for old programs)', substr_count($office->extract($fixtures . 'change.docx', 'docx'), 'Box text') === 1);
+$odt_text = $office->extract($fixtures . 'change.odt', 'odt');
+$check('ODT: list header is a paragraph, not counted', str_contains($odt_text, "LIST-HEADER\n\n1. Numbered one"), $odt_text);
+try {
+    PdfTextExtractor::ensureMemory(PHP_INT_MAX >> 2);
+    $check('not enough memory: exception instead of a fatal error', ini_get('memory_limit') === '-1');
+} catch (RuntimeException $e) {
+    $check('not enough memory: exception instead of a fatal error', true, $e->getMessage());
+}
 $check('ODT: several spaces (text:s) kept', str_contains($office->extract($fixtures . 'change.odt', 'odt'), 'A   B kept'));
 
 $not_zip = tempnam(sys_get_temp_dir(), 'pdf2text');

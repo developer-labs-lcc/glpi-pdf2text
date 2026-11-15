@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.3.0
+ * @version   1.4.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -15,6 +15,7 @@ namespace GlpiPlugin\Pdf2text;
 
 use CommonITILObject;
 use CommonITILTask;
+use CommonITILValidation;
 use DBmysql;
 use Document;
 use Document_Item;
@@ -31,7 +32,7 @@ use function Safe\sha1_file;
  *
  * Called by GLPI for every new document link (hook "item_add" on Document_Item):
  * - new ticket from the mail collector or the form: the file is linked to the ticket itself;
- * - reply mail or followup / task / solution with a file: the file is linked to that
+ * - reply mail or followup / task / solution / approval with a file: the file is linked to that
  *   sub-item, and the text goes to its parent ticket, change or problem.
  *
  * processItem() does the same afterwards for all files of an ITIL object (files attached before
@@ -93,7 +94,9 @@ final class DocumentHandler
 
     /**
      * Reads all files of an ITIL object that were not read yet: those attached to the object
-     * itself and to its followups, tasks and solutions, in the order they were attached.
+     * itself and to its followups, tasks, solutions and approvals, in the order they were
+     * attached (all of them, whatever the rights of the user: used by the console command and
+     * by the massive action for administrators).
      *
      * @param bool $dry_run only count the files that would be read (result PENDING)
      *
@@ -131,13 +134,13 @@ final class DocumentHandler
      *
      * @return string one of the result constants; DONE: read before and $force is false
      *
-     * @throws RuntimeException if the file is not attached to the object or cannot be read
+     * @throws RuntimeException if the file is not one the user may see on the object, or cannot be read
      */
     public static function processOne(CommonITILObject $parent, Document $document, bool $force): string
     {
-        // Only files of this object (or of its followups, tasks, solutions): a document of another
-        // ticket must not end up here, its text could be confidential
-        if (!self::isAttached($parent, $document)) {
+        // Only files of this object that the user may see (e.g. not those of private tasks without
+        // the right to see them): their text would end up in a followup of this user
+        if (!self::isAttached($parent, $document, true)) {
             throw new RuntimeException(sprintf('Document %d is not attached to %s #%d.', $document->getID(), $parent::class, $parent->getID()));
         }
 
@@ -145,53 +148,53 @@ final class DocumentHandler
     }
 
     /**
-     * Whether the document is attached to the ITIL object or to one of its followups, tasks or
-     * solutions.
+     * Whether the document is attached to the ITIL object or to one of its followups, tasks,
+     * solutions or approvals; with $check_rights only those the user of the session may see.
      */
-    public static function isAttached(CommonITILObject $parent, Document $document): bool
+    public static function isAttached(CommonITILObject $parent, Document $document, bool $check_rights = false): bool
     {
-        return in_array($document->getID(), self::linkedDocumentIds($parent), true);
+        return in_array($document->getID(), self::linkedDocumentIds($parent, $check_rights), true);
     }
 
     /**
-     * IDs of the documents attached to the ITIL object itself and to its followups, tasks and
-     * solutions, in the order they were attached.
+     * IDs of the documents of the file types switched on that the user of the session may see on
+     * the ITIL object (for the buttons at the attachments, see AttachmentButton).
      *
      * @return list<int>
      */
-    private static function linkedDocumentIds(CommonITILObject $parent): array
+    public static function readableDocumentIds(CommonITILObject $parent): array
+    {
+        $ids = [];
+        foreach (self::linkedDocumentIds($parent, true) as $documents_id) {
+            $document = new Document();
+            if ($document->getFromDB($documents_id)
+                && Settings::formatOf(Cast::string($document->fields['filename']), Cast::string($document->fields['mime'])) !== null) {
+                $ids[] = $documents_id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * IDs of the documents attached to the ITIL object itself and to its followups, tasks,
+     * solutions and approvals, in the order they were attached. The query is GLPI's own (the one
+     * of the documents tab and the timeline): with $check_rights it leaves out what the user of the
+     * session may not see, e.g. files of private followups and tasks.
+     *
+     * @return list<int>
+     */
+    private static function linkedDocumentIds(CommonITILObject $parent, bool $check_rights = false): array
     {
         /** @var DBmysql $DB */
         global $DB;
 
-        // The object itself and its sub-items that can carry files
-        $where = [['itemtype' => $parent::class, 'items_id' => $parent->getID()]];
-        $subitems = [
-            ITILFollowup::class => ['itemtype' => $parent::class, 'items_id' => $parent->getID()],
-            ITILSolution::class => ['itemtype' => $parent::class, 'items_id' => $parent->getID()],
-        ];
-        $task_class = $parent::getTaskClass();
-        if ($task_class !== null && is_a($task_class, CommonITILTask::class, true)) {
-            // Tasks name their parent in a foreign key, e.g. TicketTask::tickets_id
-            $subitems[$task_class] = [getForeignKeyFieldForItemType($parent::class) => $parent->getID()];
-        }
-        foreach ($subitems as $itemtype => $criteria) {
-            $ids = array_column(iterator_to_array($DB->request([
-                'SELECT' => ['id'],
-                'FROM'   => getTableForItemType($itemtype),
-                'WHERE'  => $criteria,
-            ]), false), 'id');
-            if ($ids !== []) {
-                $where[] = ['itemtype' => $itemtype, 'items_id' => $ids];
-            }
-        }
-
         $ids = [];
         foreach ($DB->request([
-            'SELECT' => ['documents_id'],
+            'SELECT' => [Document_Item::getTableField('documents_id')],
             'FROM'   => Document_Item::getTable(),
-            'WHERE'  => ['OR' => $where],
-            'ORDER'  => 'id',
+            'WHERE'  => $parent->getAssociatedDocumentsCriteria(!$check_rights),
+            'ORDER'  => Document_Item::getTableField('id'),
         ]) as $link) {
             if (is_array($link)) {
                 $ids[] = Cast::int($link['documents_id'] ?? 0);
@@ -200,6 +203,44 @@ final class DocumentHandler
 
         // A document linked twice (e.g. to a followup and to the ticket) is read once
         return array_values(array_unique($ids));
+    }
+
+    /**
+     * Whether the document is attached to the ITIL object only through private followups or tasks
+     * (or approvals): its text then goes into a private followup, whatever the setting says, so
+     * that a requester does not read the text of a file only technicians could see.
+     */
+    private static function onlyPrivate(CommonITILObject $parent, Document $document): bool
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        $links = $DB->request([
+            'SELECT' => [Document_Item::getTableField('itemtype'), Document_Item::getTableField('items_id')],
+            'FROM'   => Document_Item::getTable(),
+            'WHERE'  => [Document_Item::getTableField('documents_id') => $document->getID()] + [$parent->getAssociatedDocumentsCriteria(true)],
+        ]);
+        $found = false;
+        foreach ($links as $link) {
+            if (!is_array($link)) {
+                continue;
+            }
+            $found = true;
+            $item  = getItemForItemtype(Cast::string($link['itemtype'] ?? ''));
+            if ($item instanceof ITILFollowup || $item instanceof CommonITILTask) {
+                if ($item->getFromDB(Cast::int($link['items_id'] ?? 0)) && Cast::int($item->fields['is_private'] ?? 1) === 0) {
+                    return false;
+                }
+                continue;
+            }
+            if ($item instanceof CommonITILValidation) {
+                continue;
+            }
+            // The ITIL object itself or a solution: visible to everybody who sees the object
+            return false;
+        }
+
+        return $found;
     }
 
     /**
@@ -232,8 +273,33 @@ final class DocumentHandler
         if ($dry_run) {
             return self::PENDING;
         }
+        // Reserved before reading, against a second process reading the same file now (null: a row
+        // exists already; with $force the text is added again all the same)
+        $reservation = ProcessedFiles::reserve($parent, $sha1sum, $document->getID());
+        if ($reservation === null && !$force) {
+            return self::DONE;
+        }
         self::$done[$key] = true;
+        try {
+            return self::readAndAdd($parent, $document, $format, $path, $sha1sum);
+        } catch (Throwable $e) {
+            // Not remembered: the next attempt (e.g. the console command) tries again
+            unset(self::$done[$key]);
+            ProcessedFiles::release((int) $reservation);
+            throw $e;
+        }
+    }
 
+    /**
+     * Reads the file and adds its text as a followup (part of processDocument()).
+     *
+     * @return string ADDED or EMPTY
+     *
+     * @throws RuntimeException if the file cannot be read or the followup cannot be added
+     */
+    private static function readAndAdd(CommonITILObject $parent, Document $document, string $format, string $path, string $sha1sum): string
+    {
+        $filename  = Cast::string($document->fields['filename']);
         $max_chars = Settings::getInt('max_chars', 1000, 1000000);
         if ($format === 'pdf') {
             $text = (new PdfTextExtractor(Cast::string(Settings::get('pdftotext_path'))))->extract($path);
@@ -261,15 +327,14 @@ final class DocumentHandler
             'itemtype'      => $parent::class,
             'items_id'      => $parent->getID(),
             'content'       => self::buildContent($filename, $format, $body, $shortened),
-            'is_private'    => Cast::int(Settings::get('is_private')),
+            // Private as set, and always if the file is only on private followups or tasks
+            'is_private'    => (bool) Settings::get('is_private') || self::onlyPrivate($parent, $document) ? 1 : 0,
             // No mail for this followup: the notification for the ticket or followup itself is enough.
             '_disablenotif' => true,
             // Do not reopen a solved or closed ticket because of the added text.
             '_no_reopen'    => true,
         ]);
         if ($followup_id === false) {
-            // Not remembered: the next attempt (e.g. the console command) tries again
-            unset(self::$done[$key]);
             throw new RuntimeException(sprintf('The followup for %s #%d could not be added.', $parent::class, $parent->getID()));
         }
         ProcessedFiles::remember($parent, $sha1sum, $document->getID(), Cast::int($followup_id));
@@ -296,8 +361,8 @@ final class DocumentHandler
             return self::getParent(Cast::string($item->fields['itemtype']), Cast::int($item->fields['items_id']));
         }
 
-        // Tasks store their parent in a foreign key, e.g. TicketTask::tickets_id.
-        if ($item instanceof CommonITILTask) {
+        // Tasks and approvals store their parent in a foreign key, e.g. TicketTask::tickets_id.
+        if ($item instanceof CommonITILTask || $item instanceof CommonITILValidation) {
             $parent_type = $item::getItilObjectItemType();
             $foreign_key = getForeignKeyFieldForItemType($parent_type);
 

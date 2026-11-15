@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   2.0.0
+ * @version   2.1.0
  * @created   2026-11-15
  * @changed   2026-11-15
  */
@@ -56,6 +56,9 @@ final class OfficeTextExtractor
      */
     private const MAX_XML_BYTES = 20 * 1024 * 1024;
 
+    /** Memory the DOM of an XML file needs, as a multiple of its size (rough, on the safe side). */
+    private const DOM_MEMORY_FACTOR = 10;
+
     /** XML namespaces (WordprocessingML, markup compatibility; ODF office, text, table, style). */
     private const NS_W      = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
     private const NS_MC     = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
@@ -84,6 +87,12 @@ final class OfficeTextExtractor
 
     /** ODT: number of the lists met so far (their ids for the item blocks) */
     private int $odt_lists = 0;
+
+    /** ODT: id of the last list on the top level (for text:continue-numbering) */
+    private string $odt_last_list = '';
+
+    /** @var array<string, string> ODT: xml:id of a list => its id (for text:continue-list) */
+    private array $odt_list_xml_ids = [];
 
     /**
      * Returns the plain text of the document (see toText()), or an empty string if it contains
@@ -138,6 +147,8 @@ final class OfficeTextExtractor
             } else {
                 $this->odt_list_styles = [];
                 $this->odt_lists       = 0;
+                $this->odt_last_list   = '';
+                $this->odt_list_xml_ids = [];
                 $styles = self::readZipEntry($zip, 'styles.xml', false);
                 if ($styles !== null) {
                     $this->readOdtListStyles($styles);
@@ -177,14 +188,11 @@ final class OfficeTextExtractor
     public static function toText(array $blocks): string
     {
         $out = '';
-        // Numbers of the numbered lists per depth (restart when a list ends)
+        // Numbers per list and level: a list interrupted by a paragraph continues its numbers
         $numbers  = [];
         $previous = '';
         foreach ($blocks as $block) {
             $type = Cast::string($block['type'] ?? '');
-            if ($type !== 'item') {
-                $numbers = [];
-            }
             // An empty line between blocks, but the items of one list follow each other directly
             if ($out !== '' && !($type === 'item' && $previous === 'item')) {
                 $out .= "\n";
@@ -195,16 +203,9 @@ final class OfficeTextExtractor
                     $out .= Cast::string($block['text'] ?? '') . "\n";
                     break;
                 case 'item':
-                    $depth = max(1, Cast::int($block['depth'] ?? 1));
-                    $list  = Cast::string($block['list'] ?? '');
-                    // Deeper levels start again at 1, the levels above keep their number; an item
-                    // of another list on this level starts at 1 too
-                    $numbers = array_filter($numbers, static fn(int $level) => $level <= $depth, ARRAY_FILTER_USE_KEY);
-                    if (($numbers[$depth]['list'] ?? null) !== $list) {
-                        $numbers[$depth] = ['list' => $list, 'count' => 0];
-                    }
-                    $numbers[$depth]['count']++;
-                    $mark   = (bool) ($block['numbered'] ?? false) ? $numbers[$depth]['count'] . '.' : '•';
+                    $depth  = max(1, Cast::int($block['depth'] ?? 1));
+                    $number = self::count($numbers, Cast::string($block['list'] ?? ''), $depth);
+                    $mark   = (bool) ($block['numbered'] ?? false) ? $number . '.' : '•';
                     $indent = str_repeat('  ', $depth - 1);
                     // Further lines of the item start below its text
                     $text = str_replace("\n", "\n" . $indent . str_repeat(' ', mb_strlen($mark) + 1), Cast::string($block['text'] ?? ''));
@@ -220,6 +221,23 @@ final class OfficeTextExtractor
         }
 
         return PdfTextExtractor::normalise($out);
+    }
+
+    /**
+     * Counts an item of the list $list on level $depth and returns its number. The deeper levels
+     * of that list start again at 1 with the next item there.
+     *
+     * @param array<string, array<int, int>> $numbers numbers so far, per list and level
+     */
+    private static function count(array &$numbers, string $list, int $depth): int
+    {
+        $levels = $numbers[$list] ?? [];
+        // Only the levels down to this one are kept: "array_filter … ARRAY_FILTER_USE_KEY" filters by level
+        $levels = array_filter($levels, static fn(int $level) => $level <= $depth, ARRAY_FILTER_USE_KEY);
+        $levels[$depth] = ($levels[$depth] ?? 0) + 1;
+        $numbers[$list] = $levels;
+
+        return $levels[$depth];
     }
 
     /**
@@ -241,6 +259,9 @@ final class OfficeTextExtractor
         $list_ids = [];
         /** @var array<int, bool> $open_item whether the last <li> of a level is still open (a deeper list goes into it) */
         $open_item = [];
+        // Numbers per list and level (see count()): a numbered list continued after a paragraph
+        // starts with its next number (<ol start="…">)
+        $numbers = [];
 
         // Closes the open lists down to $to_depth levels
         $close_lists = static function (int $to_depth) use (&$html, &$lists, &$open_item): void {
@@ -255,6 +276,10 @@ final class OfficeTextExtractor
         };
 
         foreach ($blocks as $block) {
+            // Stop when the text is used up or a block was cut (no bits of the next block)
+            if ($shortened) {
+                break;
+            }
             if ($left <= 0) {
                 $shortened = true;
                 break;
@@ -264,19 +289,20 @@ final class OfficeTextExtractor
                 $close_lists(0);
                 [$table, $left, $cut] = self::tableHtml(is_array($block['rows'] ?? null) ? $block['rows'] : [], $left);
                 $html     .= $table;
-                $shortened = $shortened || $cut;
+                $shortened = $cut;
                 continue;
             }
 
             [$text, $cut] = PdfTextExtractor::truncate(Cast::string($block['text'] ?? ''), $left);
             $left     -= mb_strlen($text);
-            $shortened = $shortened || $cut;
+            $shortened = $cut;
             $inline    = self::inlineHtml($text);
 
             if ($type === 'item') {
                 $depth    = max(1, min(self::MAX_LIST_DEPTH, Cast::int($block['depth'] ?? 1)));
                 $numbered = (bool) ($block['numbered'] ?? false);
                 $list_id  = Cast::string($block['list'] ?? '');
+                $number   = self::count($numbers, $list_id, $depth);
                 $close_lists($depth);
                 // Same level, other list or other kind of list: a new list
                 if (count($lists) === $depth && ($lists[$depth - 1] !== $numbered || ($list_ids[$depth] ?? '') !== $list_id)) {
@@ -294,7 +320,7 @@ final class OfficeTextExtractor
                     $kind    = $level + 1 === $depth ? $numbered : false;
                     $lists[] = $kind;
                     $list_ids[count($lists)] = $level + 1 === $depth ? $list_id : '';
-                    $html   .= $kind ? '<ol>' : '<ul>';
+                    $html   .= $kind ? ($level + 1 === $depth && $number > 1 ? '<ol start="' . $number . '">' : '<ol>') : '<ul>';
                 }
                 if ($open_item[$depth] ?? false) {
                     $html .= '</li>';
@@ -373,6 +399,8 @@ final class OfficeTextExtractor
         if ($stat['size'] > self::MAX_XML_BYTES) {
             throw new RuntimeException(sprintf('The text of the document is too large (%d bytes unpacked).', $stat['size']));
         }
+        // The DOM needs many times the size of the XML (see PdfTextExtractor::ensureMemory())
+        PdfTextExtractor::ensureMemory($stat['size'] * self::DOM_MEMORY_FACTOR);
         $xml = $zip->getFromName($entry);
         if ($xml === false) {
             throw new RuntimeException(sprintf('"%s" could not be unpacked.', $entry));
@@ -618,12 +646,30 @@ final class OfficeTextExtractor
         }
         if ($ns === self::NS_TEXT && $name === 'list') {
             // A nested list without own style continues the style of the list around it
-            $style   = $node->getAttributeNS(self::NS_TEXT, 'style-name') ?: $list_style;
-            $list_id = 'odt-' . ++$this->odt_lists;
+            $style = $node->getAttributeNS(self::NS_TEXT, 'style-name') ?: $list_style;
+            // A list that continues an earlier one (text:continue-list = its xml:id, or
+            // text:continue-numbering = the list before) counts on with its numbers
+            $continues = $this->odt_list_xml_ids[$node->getAttributeNS(self::NS_TEXT, 'continue-list')] ?? null;
+            if ($continues === null && $depth === 0 && $node->getAttributeNS(self::NS_TEXT, 'continue-numbering') === 'true' && $this->odt_last_list !== '') {
+                $continues = $this->odt_last_list;
+            }
+            $list_id = $continues ?? 'odt-' . ++$this->odt_lists;
+            $xml_id  = $node->getAttributeNS('http://www.w3.org/XML/1998/namespace', 'id');
+            if ($xml_id !== '') {
+                $this->odt_list_xml_ids[$xml_id] = $list_id;
+            }
+            if ($depth === 0) {
+                $this->odt_last_list = $list_id;
+            }
             foreach ($node->childNodes as $item) {
-                if ($item instanceof DOMElement && $item->namespaceURI === self::NS_TEXT
-                    && ($item->localName === 'list-item' || $item->localName === 'list-header')) {
+                if (!$item instanceof DOMElement || $item->namespaceURI !== self::NS_TEXT) {
+                    continue;
+                }
+                if ($item->localName === 'list-item') {
                     $this->odtListItem($item, $blocks, $depth + 1, $style, $list_id);
+                } elseif ($item->localName === 'list-header') {
+                    // Heading of a list, without bullet or number: a paragraph (the list counts on after it)
+                    $this->walkBlocks($item, $blocks, 0, null);
                 }
             }
             return;
@@ -709,14 +755,27 @@ final class OfficeTextExtractor
         return $rows;
     }
 
-    /** Text of a table cell: the text of all paragraphs in it, separated by spaces. */
-    private function cellText(DOMElement $cell): string
+    /**
+     * Text of a table cell: the text of its paragraphs (also in lists and nested tables),
+     * separated by spaces. Text boxes in a paragraph are part of its text (inlineText()), so the
+     * walk does not go into paragraphs; copies for old programs (mc:Fallback), comments and
+     * footnotes are skipped.
+     */
+    private function cellText(DOMNode $node): string
     {
         $parts = [];
-        $names = $this->format === self::DOCX ? [[self::NS_W, 'p']] : [[self::NS_TEXT, 'p'], [self::NS_TEXT, 'h']];
-        foreach ($names as [$ns, $name]) {
-            foreach ($cell->getElementsByTagNameNS($ns, $name) as $p) {
-                $parts[] = self::clean($this->inlineText($p));
+        foreach ($node->childNodes as $child) {
+            if (!$child instanceof DOMElement) {
+                continue;
+            }
+            $ns   = $child->namespaceURI;
+            $name = $child->localName;
+            if (($ns === self::NS_W && $name === 'p') || ($ns === self::NS_TEXT && ($name === 'p' || $name === 'h'))) {
+                $parts[] = self::clean($this->inlineText($child));
+            } elseif (!(($ns === self::NS_MC && $name === 'Fallback')
+                || ($ns === self::NS_OFFICE && $name === 'annotation')
+                || ($ns === self::NS_TEXT && in_array($name, ['note', 'tracked-changes'], true)))) {
+                $parts[] = $this->cellText($child);
             }
         }
 

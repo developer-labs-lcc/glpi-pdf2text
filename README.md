@@ -12,8 +12,8 @@ creates the ticket, and the plugin adds the text of the PDF as a followup.
 - Every time a PDF, DOCX or ODT file is linked to a ticket, change or problem, the plugin reads
   its text and adds it as a **followup** (private by default). This covers:
   - new tickets from the **mail collector** and the web form,
-  - **reply mails** and followups, tasks or solutions with a file (the text goes to their
-    ticket, change or problem),
+  - **reply mails** and followups, tasks, solutions or approvals with a file (the text goes to
+    their ticket, change or problem),
   - documents added through the API.
 - PDFs are read with **`pdftotext`** (package `poppler-utils`) if it is installed, which keeps
   tables and columns. Otherwise the bundled PHP parser
@@ -30,6 +30,9 @@ creates the ticket, and the plugin adds the text of the PDF as a followup.
   followup. Files are recognised by their checksum, not by their name: a new file with an old
   name (e.g. this month's `report.pdf`) is read. If the text followup is deleted, the file
   counts as not read again.
+- **Private files stay private:** if a file is only attached to private followups or tasks
+  (or approvals), its text goes into a private followup, also when the setting "Private
+  followup" is off.
 - **Scanned PDFs** (images without a text layer) are skipped – there is no OCR.
 - The followup does **not** send notifications and does **not** reopen solved tickets.
 - Problems (unreadable or broken files) are logged to `files/_log/pdf2text.log`; the ticket is
@@ -46,8 +49,9 @@ file) in front of them:
 - If the text of this file was added before, the button asks first and adds it again on
   **Add again** (e.g. when the earlier followup was shortened or edited).
 - Shown to the users who may add a followup to this ticket, change or problem (the same right as
-  GLPI's **Answer**). Only files of this object (or of its followups, tasks and solutions) can be
-  read this way.
+  GLPI's **Answer**), in the standard and in the simplified interface. Only at the files of this
+  object that the user may see there: not e.g. at files of private tasks without the right to
+  see private tasks.
 - Files without text (e.g. scanned PDFs) and files that cannot be read give a message instead.
 
 GLPI has no hook for these buttons; the plugin adds the button with JavaScript
@@ -78,7 +82,8 @@ skipped, so both ways can be repeated at any time:
 
   Options: `--itemtype` / `-t` (`Ticket`, `Change` or `Problem`; default: the types switched on),
   `--id` (with `--itemtype`), `--since` / `-s` (day `YYYY-MM-DD`), `--limit` / `-l` (number of
-  items), `--dry-run`, `-v` (one line per item, also for those without anything new). Run it as
+  items), `--dry-run`, `-v` (one line per item, also for those without anything new). The exit
+  code is 1 if a file could not be read. Run it as
   the user of the web server (e.g. `sudo -u www-data php bin/console …`), so that the log file
   stays writable for GLPI.
 
@@ -138,6 +143,8 @@ text of files attached before.
 
 - The PHP parser only reads PDFs up to 20 MB; larger ones need `pdftotext`.
 - `pdftotext` is stopped after 30 seconds.
+- A file that would need more memory than PHP's `memory_limit` leaves (PHP parser, Word and
+  OpenDocument) is skipped and logged instead of stopping PHP – e.g. in the mail collector.
 - Word and OpenDocument files whose text is larger than 20 MB unpacked are not read.
 - Formatting within a line (bold, italics, colours, links) and images are not taken over.
 - Files that need a password to open, the old Word format (`.doc`), spreadsheets,

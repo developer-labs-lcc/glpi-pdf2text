@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.2.2
+ * @version   1.3.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -24,7 +24,9 @@ require __DIR__ . '/bootstrap.php';
 /** @var DBmysql $DB */
 global $DB;
 
+use Glpi\Http\Firewall;
 use Glpi\RichText\RichText;
+use Glpi\Security\Attribute\SecurityStrategy;
 use GlpiPlugin\Pdf2text\AttachmentButton;
 use GlpiPlugin\Pdf2text\Console\ProcessCommand;
 use GlpiPlugin\Pdf2text\Controller\AttachmentController;
@@ -301,8 +303,8 @@ check('page of the ticket recognised', AttachmentButton::pageItem('/glpi/front/t
 check('other pages get no button', AttachmentButton::pageItem('/glpi/front/ticket.php') === null && AttachmentButton::pageItem('/glpi/front/computer.form.php?id=1') === null);
 $tag = AttachmentButton::headerTag('/glpi/front/ticket.form.php?id=' . $button_ticket->getID(), '/glpi');
 $tag_data = json_decode($tag['properties']['content'] ?? '{}', true);
-check('meta tag with address, ticket and file types', ($tag_data['url'] ?? '') === '/glpi/plugins/pdf2text/attachment'
-    && ($tag_data['items_id'] ?? 0) === $button_ticket->getID() && in_array('pdf', $tag_data['extensions'] ?? [], true), json_encode($tag_data) ?: '');
+check('meta tag with address, ticket and the documents with a button', ($tag_data['url'] ?? '') === '/glpi/plugins/pdf2text/attachment'
+    && ($tag_data['items_id'] ?? 0) === $button_ticket->getID() && ($tag_data['documents'] ?? []) === [$pdf_id], json_encode($tag_data) ?: '');
 
 $click = static function (array $data): array {
     DocumentHandler::reset();
@@ -328,6 +330,101 @@ check('without the right: no button on the page', AttachmentButton::headerTag('/
 $_SESSION['glpiactiveprofile']['followup'] = $followup_rights;
 // Messages for after the reload, noted by the clicks above
 $_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
+
+section('rights and private sub-items');
+// A PDF on a private task of somebody else: users without the right to see private tasks must not
+// get its text through the button
+$private_ticket = $create(Ticket::class, 'Private task ticket', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+$private_task = new TicketTask();
+$private_task_id = (int) $private_task->add(['tickets_id' => $private_ticket->getID(), 'content' => 'Private task', 'is_private' => 1, '_filename' => [upload('change.pdf')]]);
+Settings::set(['on_ticket' => 1]);
+$DB->update(TicketTask::getTable(), ['users_id' => 0, 'users_id_tech' => 0], ['id' => $private_task_id]);
+$task_doc = (int) ($DB->request(['SELECT' => ['documents_id'], 'FROM' => Document_Item::getTable(), 'WHERE' => ['itemtype' => TicketTask::class, 'items_id' => $private_task_id]])->current()['documents_id'] ?? 0);
+$task_rights = $_SESSION['glpiactiveprofile']['task'];
+$_SESSION['glpiactiveprofile']['task'] = $task_rights & ~CommonITILTask::SEEPRIVATE;
+check('private task of another user: no button', !in_array($task_doc, DocumentHandler::readableDocumentIds($private_ticket), true));
+$answer = $click(['itemtype' => Ticket::class, 'items_id' => $private_ticket->getID(), 'documents_id' => $task_doc]);
+check('private task of another user: click refused', ($answer['code'] ?? 0) === 404 && count(pdf_followups($private_ticket)) === 0, json_encode($answer) ?: '');
+$_SESSION['glpiactiveprofile']['task'] = $task_rights;
+check('with the right to see private tasks: button', in_array($task_doc, DocumentHandler::readableDocumentIds($private_ticket), true));
+// The text of a file only on a private task goes into a private followup, whatever the setting
+Settings::set(['is_private' => 0]);
+DocumentHandler::reset();
+DocumentHandler::processItem($private_ticket);
+check('file only on a private task: private followup although the setting says public', (int) (pdf_followups($private_ticket)[0]['is_private'] ?? 0) === 1);
+DocumentHandler::reset();
+$public_reply = $create(Ticket::class, 'Public file ticket', ['change.odt']);
+check('file on the ticket itself: public followup as set', (int) (followups_with($public_reply, 'OKAPI-0815')[0]['is_private'] ?? 1) === 0);
+Settings::set(['is_private' => 1]);
+
+section('approvals');
+$validation_ticket = $create(Ticket::class, 'Approval ticket', []);
+DocumentHandler::reset();
+$validation = new TicketValidation();
+$validation_id = (int) $validation->add([
+    'tickets_id'         => $validation_ticket->getID(),
+    'itemtype_target'    => User::class,
+    'items_id_target'    => Session::getLoginUserID(),
+    'comment_submission' => 'Approval with a PDF',
+    '_filename'          => [upload('change.pdf')],
+]);
+check('approval created', $validation_id > 0);
+check('PDF of an approval: text added to the ticket', count(pdf_followups($validation_ticket)) === 1, (string) count(pdf_followups($validation_ticket)));
+
+section('two processes at the same time');
+$race_ticket = $create(Ticket::class, 'Race ticket', []);
+$race_file = upload_same('change.pdf', 9);
+// Another process has reserved this file for the ticket (it is reading it right now)
+$reserved = ProcessedFiles::reserve($race_ticket, sha1_file(GLPI_TMP_DIR . '/' . $race_file) ?: '', 0);
+check('reservation made', is_int($reserved) && $reserved > 0);
+check('second reservation of the same file refused', ProcessedFiles::reserve($race_ticket, sha1_file(GLPI_TMP_DIR . '/' . $race_file) ?: '', 0) === null);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $race_ticket->getID(), 'content' => 'Mail', '_filename' => [$race_file]]);
+check('file reserved by another process: no second followup', count(pdf_followups($race_ticket)) === 0);
+ProcessedFiles::release((int) $reserved);
+
+section('similar names in followups of before the tracking');
+$similar = $create(Ticket::class, 'Similar name ticket', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $similar->getID(), 'content' => 'Mail', '_filename' => [upload_same('change.pdf', 4)]]);
+Settings::set(['on_ticket' => 1]);
+// Old followup about another file whose name ends with the name of this one
+$similar_old = (int) (new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $similar->getID(), 'content' => '<p><strong>Text of the PDF attachment &quot;old-' . htmlescape(run_id() . '-4-change.pdf') . '&quot;</strong></p><pre>x</pre>', '_disablenotif' => true]);
+$DB->update(ITILFollowup::getTable(), ['date_creation' => '2020-01-01 00:00:00'], ['id' => $similar_old]);
+DocumentHandler::reset();
+$counts = DocumentHandler::processItem($similar);
+check('"old-x.pdf" does not count as "x.pdf"', $counts[DocumentHandler::ADDED] === 1, json_encode($counts) ?: '');
+
+section('massive action over several pages');
+$ma_ticket2 = $create(Ticket::class, 'Massive ticket 2', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $ma_ticket2->getID(), 'content' => 'Mail', '_filename' => [upload('change.pdf')]]);
+Settings::set(['on_ticket' => 1]);
+DocumentHandler::reset();
+$_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
+$ma2 = new MassiveAction([
+    'action'        => MassiveActions::ACTION,
+    'processor'     => MassiveActions::class,
+    'items'         => [Ticket::class => [$ma_ticket2->getID() => $ma_ticket2->getID()]],
+    'initial_items' => [Ticket::class => [$ma_ticket2->getID() => $ma_ticket2->getID()]],
+    'action_name'   => 'PDF2Text',
+    'is_deleted'    => 0,
+], [], 'process');
+// As after a reload of GLPI during the run: 4 followups were added on the pages before
+$ma2->results['pdf2text_totals'] = [DocumentHandler::ADDED => 4, DocumentHandler::EMPTY => 0, DocumentHandler::DONE => 0, DocumentHandler::FAILED => 0];
+$ma2->results['pdf2text_message'] = ['type' => INFO, 'text' => 'PDF2Text: 4 followups added'];
+$_SESSION['MESSAGE_AFTER_REDIRECT'][INFO] = ['PDF2Text: 4 followups added'];
+MassiveActions::processMassiveActionsForOneItemtype($ma2, new Ticket(), [$ma_ticket2->getID()]);
+check('summary counts the whole run, one message', ($_SESSION['MESSAGE_AFTER_REDIRECT'][INFO] ?? []) === ['PDF2Text: 5 followups added'], json_encode($_SESSION['MESSAGE_AFTER_REDIRECT']) ?: '');
+$_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
+
+section('simplified interface');
+$attributes = (new ReflectionMethod(AttachmentController::class, 'attachment'))->getAttributes(SecurityStrategy::class);
+check('button address open to every logged-in user (rights checked per file)', count($attributes) === 1 && ($attributes[0]->getArguments()[0] ?? '') === Firewall::STRATEGY_AUTHENTICATED);
 
 section('purge');
 $purge_id = $before->getID();

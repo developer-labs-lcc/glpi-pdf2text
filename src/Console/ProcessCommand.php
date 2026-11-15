@@ -6,8 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.0
+ * @version   1.0.1
  * @created   2026-11-15
+ * @changed   2026-11-15
  */
 
 namespace GlpiPlugin\Pdf2text\Console;
@@ -148,6 +149,8 @@ final class ProcessCommand extends AbstractCommand
         $output->writeln(sprintf('%d object(s)%s: %s', $objects, $dry_run ? ' (dry run, nothing added)' : '', self::summary($totals)));
         if ($totals[DocumentHandler::FAILED] > 0) {
             $output->writeln('<comment>Files that could not be read are listed in files/_log/pdf2text.log.</comment>');
+            // Exit code 1, e.g. for a script running the command
+            return self::FAILURE;
         }
 
         return self::SUCCESS;

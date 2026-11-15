@@ -6,8 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.0
+ * @version   1.1.0
  * @created   2026-11-15
+ * @changed   2026-11-15
  */
 
 namespace GlpiPlugin\Pdf2text;
@@ -28,8 +29,9 @@ use function Safe\preg_match;
  *
  * GLPI has no hook for these buttons, so public/js/attachments.js adds it to the page. It gets
  * what it needs from a <meta name="pdf2text-attachments"> tag in the header of the page
- * (headerTag()): the address to call, the ITIL object of the page, the file extensions that are
- * read and the texts. The tag is only there for users who may add a followup to that object.
+ * (headerTag()): the address to call, the ITIL object of the page, the documents that get the
+ * button and the texts. The tag is only there for users who may add a followup to that object,
+ * and lists only the documents of the file types switched on that they may see on it.
  * A click is handled by Controller\AttachmentController.
  */
 final class AttachmentButton
@@ -77,7 +79,8 @@ final class AttachmentButton
 
     /**
      * Whether the user of the session may add a followup to the ITIL object (the same check as
-     * GLPI's "Answer" button: rights of the profile, the object is visible, not closed, …).
+     * GLPI's "Answer" button: rights of the profile, the object is visible, and closed only if the
+     * user may reopen it; the plugin does not reopen it, see DocumentHandler).
      */
     public static function mayUse(CommonITILObject $item): bool
     {
@@ -91,23 +94,6 @@ final class AttachmentButton
     }
 
     /**
-     * File name extensions of the file types switched on, e.g. ["pdf", "docx", "odt"].
-     *
-     * @return list<string>
-     */
-    public static function extensions(): array
-    {
-        $extensions = [];
-        foreach (Settings::FILETYPES as $key => $type) {
-            if ((bool) Settings::get($key)) {
-                $extensions[] = $type['extension'];
-            }
-        }
-
-        return $extensions;
-    }
-
-    /**
      * Meta tag for the hook "add_header_tag", or null if the page gets no button (no form of an
      * ITIL object, type switched off, no right to add a followup).
      *
@@ -116,7 +102,13 @@ final class AttachmentButton
     public static function headerTag(string $request_uri, string $root_doc): ?array
     {
         $item = self::pageItem($request_uri);
-        if ($item === null || !self::mayUse($item) || self::extensions() === []) {
+        if ($item === null || !self::mayUse($item)) {
+            return null;
+        }
+        // Documents of the file types switched on that the user may see on this object (not e.g.
+        // those of private tasks without the right to see them, nor of an entity note)
+        $documents = DocumentHandler::readableDocumentIds($item);
+        if ($documents === []) {
             return null;
         }
 
@@ -126,7 +118,7 @@ final class AttachmentButton
                 'url'        => $root_doc . self::URL,
                 'itemtype'   => $item::class,
                 'items_id'   => $item->getID(),
-                'extensions' => self::extensions(),
+                'documents'  => $documents,
                 'texts'      => [
                     'button'  => __('Copy the text into a followup (PDF2Text)', 'pdf2text'),
                     'title'   => 'PDF2Text',

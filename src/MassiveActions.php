@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.1
+ * @version   1.1.0
  * @changed   2026-11-15
  * @created   2026-11-15
  */
@@ -32,6 +32,10 @@ use Session;
 final class MassiveActions
 {
     public const ACTION = 'process';
+
+    /** Keys of the plugin in MassiveAction::$results (kept by GLPI across the reloads of a run) */
+    private const RESULTS_KEY = 'pdf2text_totals';
+    private const MESSAGE_KEY = 'pdf2text_message';
 
     /**
      * Actions for the list of the given type (key = class + ":" + action, value = label).
@@ -81,26 +85,55 @@ final class MassiveActions
             return;
         }
 
-        $totals = [DocumentHandler::ADDED => 0, DocumentHandler::EMPTY => 0, DocumentHandler::DONE => 0, DocumentHandler::FAILED => 0];
-        foreach ($ids as $id) {
-            if (!$item->getFromDB(Cast::int($id))) {
-                $ma->itemDone($item::class, Cast::int($id), MassiveAction::ACTION_KO);
-                continue;
-            }
-            $counts = DocumentHandler::processItem($item);
-            foreach (array_keys($totals) as $result) {
-                $totals[$result] += $counts[$result];
-            }
-            $ma->itemDone($item::class, Cast::int($id), $counts[DocumentHandler::FAILED] > 0 ? MassiveAction::ACTION_KO : MassiveAction::ACTION_OK);
+        // Totals of the whole run in $ma->results: GLPI keeps them in the session when it reloads
+        // the page during a long run (MassiveAction::itemDone() redirects after 5 seconds, also in
+        // the middle of this loop), and continues with the items left
+        $stored = $ma->results[self::RESULTS_KEY] ?? [];
+        $totals = [];
+        foreach ([DocumentHandler::ADDED, DocumentHandler::EMPTY, DocumentHandler::DONE, DocumentHandler::FAILED] as $key) {
+            $totals[$key] = is_array($stored) ? Cast::int($stored[$key] ?? 0) : 0;
         }
+        foreach ($ids as $id) {
+            $result = MassiveAction::ACTION_KO;
+            if ($item->getFromDB(Cast::int($id))) {
+                $counts = DocumentHandler::processItem($item);
+                foreach ([DocumentHandler::ADDED, DocumentHandler::EMPTY, DocumentHandler::DONE, DocumentHandler::FAILED] as $key) {
+                    $totals[$key] += $counts[$key];
+                }
+                $result = $counts[DocumentHandler::FAILED] > 0 ? MassiveAction::ACTION_KO : MassiveAction::ACTION_OK;
+            }
+            // Before itemDone(), which may reload the page
+            $ma->results[self::RESULTS_KEY] = $totals;
+            self::showSummary($ma, $totals);
+            $ma->itemDone($item::class, Cast::int($id), $result);
+        }
+    }
 
-        // Not with $ma->addMessage(): GLPI shows those messages as errors (front/massiveaction.php),
-        // also a summary of a successful run. Shown after GLPI's own "Operation successful".
-        Session::addMessageAfterRedirect(
-            htmlescape(self::summary($totals)),
-            false,
-            $totals[DocumentHandler::FAILED] > 0 ? WARNING : INFO,
-        );
+    /**
+     * Shows the summary of the run after it (one message, replaced after every item, so that it
+     * is right however often GLPI reloads the page). Not with $ma->addMessage(): GLPI shows those
+     * messages as errors (front/massiveaction.php), also a summary of a successful run.
+     *
+     * @param array<string, int> $totals
+     */
+    private static function showSummary(MassiveAction $ma, array $totals): void
+    {
+        $type = $totals[DocumentHandler::FAILED] > 0 ? WARNING : INFO;
+        $text = htmlescape(self::summary($totals));
+
+        // Remove the message of the previous item (same run), then add the new one
+        $previous = $ma->results[self::MESSAGE_KEY] ?? null;
+        if (is_array($previous)) {
+            $previous_type = Cast::int($previous['type'] ?? 0);
+            $previous_text = Cast::string($previous['text'] ?? '');
+            $all           = $_SESSION['MESSAGE_AFTER_REDIRECT'] ?? [];
+            if (is_array($all) && is_array($all[$previous_type] ?? null)) {
+                $all[$previous_type] = array_values(array_filter($all[$previous_type], static fn($message) => $message !== $previous_text));
+                $_SESSION['MESSAGE_AFTER_REDIRECT'] = $all;
+            }
+        }
+        Session::addMessageAfterRedirect($text, false, $type);
+        $ma->results[self::MESSAGE_KEY] = ['type' => $type, 'text' => $text];
     }
 
     /**

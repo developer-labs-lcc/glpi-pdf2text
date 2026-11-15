@@ -6,14 +6,17 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.0
+ * @version   1.1.0
  * @created   2026-11-15
+ * @changed   2026-11-15
  */
 
 namespace GlpiPlugin\Pdf2text\Controller;
 
 use Document;
 use Glpi\Controller\AbstractController;
+use Glpi\Http\Firewall;
+use Glpi\Security\Attribute\SecurityStrategy;
 use GlpiPlugin\Pdf2text\AttachmentButton;
 use GlpiPlugin\Pdf2text\Cast;
 use GlpiPlugin\Pdf2text\DocumentHandler;
@@ -36,6 +39,9 @@ use Toolbox;
  */
 final class AttachmentController extends AbstractController
 {
+    // For every logged-in user, also of the simplified interface (GLPI's default for plugin
+    // routes is the standard interface only): the rights are checked below, per file
+    #[SecurityStrategy(Firewall::STRATEGY_AUTHENTICATED)]
     #[Route('/attachment', name: 'attachment', methods: ['POST'])]
     public function attachment(Request $request): Response
     {
@@ -51,8 +57,9 @@ final class AttachmentController extends AbstractController
             return self::answer('denied', __('You may not add a followup here.', 'pdf2text'), Response::HTTP_FORBIDDEN);
         }
         $document = new Document();
-        // Only a file of this object: the text of a file of another ticket could be confidential
-        if (!$document->getFromDB($request->request->getInt('documents_id')) || !DocumentHandler::isAttached($parent, $document)) {
+        // Only a file of this object that the user may see there: the text of a file of another
+        // ticket or of a private task could be confidential
+        if (!$document->getFromDB($request->request->getInt('documents_id')) || !DocumentHandler::isAttached($parent, $document, true)) {
             return self::answer('failed', __('The file was not found.', 'pdf2text'), Response::HTTP_NOT_FOUND);
         }
 

@@ -4,12 +4,14 @@
 # @link      https://developer-labs.com/en/glpi-development/
 # @copyright Developer Labs LLC
 # @license   GPL-3.0-or-later – see LICENSE
-# @version   1.0.0
+# @version   1.0.1
+# @changed   2026-11-15
 # @created   2026-11-15
 """Builds the test documents change.docx and change.odt next to this script.
 
 Both hold the same content: a heading, paragraphs with umlauts, a tab and a line break, a
-bulleted list with a nested numbered list, a numbered list, a table and a search token. Parts
+bulleted list with a nested numbered list, a numbered list that goes on after a paragraph (3.),
+a table with a text box in a cell and a search token; the ODT also a list header. Parts
 that must not be read: deleted text of tracked changes, a field code, a comment, a footnote, a
 paragraph in the styles, a generated table of contents and (DOCX) the fallback copy of a text box.
 
@@ -52,8 +54,11 @@ document = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 {wp("Bullet two", num=(1, 0))}
 {wp("Numbered one", num=(2, 0))}
 {wp("Numbered two", num=(2, 0))}
+{wp("Between the lists")}
+{wp("Numbered three", num=(2, 0))}
 <w:p><w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><w:txbxContent><w:p><w:r><w:t>Box text</w:t></w:r></w:p></w:txbxContent></w:drawing></mc:Choice><mc:Fallback><w:pict><w:txbxContent><w:p><w:r><w:t>Box text</w:t></w:r></w:p></w:txbxContent></w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p>
-<w:tbl><w:tr>{cell("System")}{cell("Impact")}</w:tr><w:tr>{cell("Core router R1")}{cell("Outage", "15 min")}</w:tr></w:tbl>
+<w:tbl><w:tr>{cell("System")}{cell("Impact")}</w:tr><w:tr>{cell("Core router R1")}{cell("Outage", "15 min")}</w:tr>
+<w:tr><w:tc><w:p><w:r><w:t>Cell with box:</w:t></w:r><w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><w:txbxContent><w:p><w:r><w:t>CELLBOX</w:t></w:r></w:p></w:txbxContent></w:drawing></mc:Choice><mc:Fallback><w:pict><w:txbxContent><w:p><w:r><w:t>CELLBOX</w:t></w:r></w:p></w:txbxContent></w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p></w:tc>{cell("x")}</w:tr></w:tbl>
 {wp("Unique search token: OKAPI-0815")}
 <w:sectPr/>
 </w:body></w:document>'''
@@ -90,6 +95,7 @@ NS = ('xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
       'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
       'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
       'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" '
+      'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" '
       'xmlns:dc="http://purl.org/dc/elements/1.1/" office:version="1.3"')
 content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <office:document-content {NS}>
@@ -116,12 +122,18 @@ content = f'''<?xml version="1.0" encoding="UTF-8"?>
         <text:list-item><text:p>Bullet two</text:p></text:list-item>
       </text:list>
       <text:list text:style-name="L2">
+        <text:list-header><text:p>LIST-HEADER</text:p></text:list-header>
         <text:list-item><text:p>Numbered one</text:p></text:list-item>
         <text:list-item><text:p>Numbered two</text:p></text:list-item>
+      </text:list>
+      <text:p>Between the lists</text:p>
+      <text:list text:style-name="L2" text:continue-numbering="true">
+        <text:list-item><text:p>Numbered three</text:p></text:list-item>
       </text:list>
       <table:table>
         <table:table-row><table:table-cell><text:p>System</text:p></table:table-cell><table:table-cell><text:p>Impact</text:p></table:table-cell></table:table-row>
         <table:table-row><table:table-cell><text:p>Core router R1</text:p></table:table-cell><table:table-cell><text:p>Outage</text:p><text:p>15 min</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell><text:p>Cell with box:<draw:frame><draw:text-box><text:p>CELLBOX</text:p></draw:text-box></draw:frame></text:p></table:table-cell><table:table-cell><text:p>x</text:p></table:table-cell></table:table-row>
       </table:table>
       <text:p>Unique search token: OKAPI-0815</text:p>
     </office:text>

@@ -16,8 +16,13 @@
   of tickets, changes and problems, and the console command `plugins:pdf2text:process`
   (with `--dry-run`, `--since`, `--itemtype`, `--id`, `--limit`).
 - Button "Copy the text into a followup" at the attachments in the timeline (next to GLPI's buttons
-  edit, delete, import exclusion list), for users who may add a followup; asks before adding the
-  text of a file a second time.
+  edit, delete, import exclusion list), for users who may add a followup (also in the simplified
+  interface), only at the files they may see; asks before adding the text of a file a second time.
+- Files of approvals are read too; the text of a file only on private followups or tasks goes
+  into a private followup.
+- Numbered lists interrupted by a paragraph count on; a file that would need too much memory is
+  skipped and logged instead of stopping PHP; the console command ends with exit code 1 if a
+  file could not be read.
 - Configuration page: item types, file types, private followup, maximum length, path of pdftotext.
 - Compatible with GLPI 11 and 12: the CSRF token is only sent where GLPI 11 needs it (GLPI 12
   checks the origin of requests instead).

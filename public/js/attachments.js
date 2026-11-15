@@ -4,8 +4,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.0
+ * @version   1.1.0
  * @created   2026-11-15
+ * @changed   2026-11-15
  *
  * Button "Copy the text into a followup" at the attachments in the timeline of a ticket, change
  * or problem, next to GLPI's own buttons (edit, delete, import exclusion list), which appear when
@@ -29,7 +30,8 @@
     } catch (e) {
         return;
     }
-    const extensions = (settings.extensions || []).map((ext) => ext.toLowerCase());
+    // Documents that get the button: of the file types read, and that the user may see here
+    const documents = (settings.documents || []).map(String);
 
     /** Escapes text for HTML (the dialogs and toasts of GLPI show HTML). */
     function escape(text) {
@@ -95,7 +97,8 @@
             delete button.dataset.pdf2textBusy;
         };
         window.fetch(settings.url, {method: 'POST', credentials: 'same-origin', headers: ajaxHeaders(), body: body})
-            .then((response) => response.json())
+            // A refused request (e.g. 403 of GLPI's firewall) may answer HTML instead of JSON
+            .then((response) => response.json().catch(() => ({status: 'failed', message: settings.texts.error})))
             .then((answer) => {
                 if (answer.status === 'added') {
                     // The new followup is in the timeline after the reload; GLPI shows the message
@@ -116,8 +119,8 @@
     }
 
     /**
-     * Adds the button to every attachment of a file type that is read. GLPI lists the files of
-     * the timeline in ".sub-documents" (images and videos are shown as previews, without these
+     * Adds the button to the attachments listed in the meta tag. GLPI lists the files of the
+     * timeline in ".sub-documents" (images and videos are shown as previews, without these
      * buttons); each has a link to front/document.send.php?docid=<id>.
      */
     function addButtons(root) {
@@ -131,10 +134,7 @@
                 return;
             }
             const documentsId = new URL(link.href, window.location.href).searchParams.get('docid');
-            // File name = text of the link; its extension after the last dot, e.g. "report.PDF" -> "pdf"
-            const filename = link.textContent.trim();
-            const extension = filename.includes('.') ? filename.split('.').pop().toLowerCase() : '';
-            if (!documentsId || !extensions.includes(extension)) {
+            if (!documentsId || !documents.includes(documentsId)) {
                 return;
             }
 

@@ -6,8 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.0
+ * @version   1.1.0
  * @created   2026-11-15
+ * @changed   2026-11-15
  */
 
 namespace GlpiPlugin\Pdf2text;
@@ -111,6 +112,65 @@ final class ProcessedFiles
     }
 
     /**
+     * Reserves the file for the ITIL object before it is read, so that two processes reading the
+     * same file at the same time (e.g. the mail collector and a click on the button) do not both
+     * add a followup: the row is added only if there is none for this file yet, in one step of the
+     * database (the unique key decides). "ON DUPLICATE KEY UPDATE id = id" changes nothing on an
+     * existing row (0 affected rows); unlike INSERT IGNORE it causes no SQL warning, which GLPI
+     * would log (and whose check resets the number of affected rows).
+     *
+     * @return int|null id of the new row; null if a row exists already (the file is read or
+     *                  being read); 0 if the table does not exist yet (update not run)
+     */
+    public static function reserve(CommonITILObject $parent, string $sha1sum, int $documents_id): ?int
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        if (!$DB->tableExists(self::TABLE)) {
+            return 0;
+        }
+        $DB->doQuery(sprintf(
+            'INSERT INTO %s (%s, %s, %s, %s, %s, %s) VALUES (%s, %d, %s, %d, 0, %s) ON DUPLICATE KEY UPDATE %s = %s',
+            DBmysql::quoteName(self::TABLE),
+            DBmysql::quoteName('itemtype'),
+            DBmysql::quoteName('items_id'),
+            DBmysql::quoteName('sha1sum'),
+            DBmysql::quoteName('documents_id'),
+            DBmysql::quoteName('itilfollowups_id'),
+            DBmysql::quoteName('date_creation'),
+            Cast::string(DBmysql::quoteValue($parent::class)),
+            $parent->getID(),
+            Cast::string(DBmysql::quoteValue($sha1sum)),
+            $documents_id,
+            Cast::string(DBmysql::quoteValue(date('Y-m-d H:i:s'))),
+            DBmysql::quoteName('id'),
+            DBmysql::quoteName('id'),
+        ));
+
+        // getAffectedRows() since GLPI 12 (affectedRows() is deprecated there), affectedRows() in
+        // GLPI 11: called by name, so that the code works with both
+        $method   = method_exists($DB, 'getAffectedRows') ? 'getAffectedRows' : 'affectedRows';
+        $affected = Cast::int($DB->$method());
+
+        return $affected > 0 ? Cast::int($DB->insertId()) : null;
+    }
+
+    /**
+     * Removes a reservation of reserve() again (the file could not be read or no followup could be
+     * added: a later attempt may try again).
+     */
+    public static function release(int $id): void
+    {
+        /** @var DBmysql $DB */
+        global $DB;
+
+        if ($id > 0 && $DB->tableExists(self::TABLE)) {
+            $DB->delete(self::TABLE, ['id' => $id]);
+        }
+    }
+
+    /**
      * Notes that the file was read for the ITIL object (followup id 0: it had no text).
      */
     public static function remember(CommonITILObject $parent, string $sha1sum, int $documents_id, int $followups_id): void
@@ -121,8 +181,8 @@ final class ProcessedFiles
         if (!$DB->tableExists(self::TABLE)) {
             return;
         }
-        // A row that exists already (e.g. the same file read by two processes at the same time)
-        // is updated instead of failing on the unique key
+        // The row reserved before (see reserve()), or the row of an earlier reading when the text
+        // is added again on request, is updated
         $DB->updateOrInsert(
             self::TABLE,
             ['documents_id' => $documents_id, 'itilfollowups_id' => $followups_id, 'date_creation' => date('Y-m-d H:i:s')],
@@ -160,8 +220,8 @@ final class ProcessedFiles
 
     /**
      * Whether a followup written before the tracking started already holds the text of a file
-     * with this name: a followup of the plugin has the file name in its heading and the text in
-     * a <pre> block (see DocumentHandler::buildContent()), in whatever language it was written.
+     * with this name: a followup of the plugin has the file name in quotes in its heading and the
+     * text in a <pre> block (see DocumentHandler::buildContent()), in English or German.
      * Newer followups are not looked at: for them the table knows, and a new file with an old
      * name must not count as read.
      */
@@ -183,9 +243,13 @@ final class ProcessedFiles
                 'items_id'      => $parent->getID(),
                 'date_creation' => ['<', $since],
                 ['content' => ['LIKE', '%<pre>%']],
-                // The name as it is written in the heading (HTML-escaped), with the LIKE wildcards
-                // % and _ (and the escape character \) of the name escaped
-                ['content' => ['LIKE', '%' . addcslashes(htmlescape($filename), '%_\\') . '%']],
+                // The name in quotes as in the heading, so that "a.pdf" does not match "data.pdf":
+                // "&quot;name&quot;" (English, the quotes HTML-escaped) or "„name“" (German); the
+                // LIKE wildcards % and _ (and the escape character \) of the name are escaped
+                ['OR' => [
+                    ['content' => ['LIKE', '%&quot;' . addcslashes(htmlescape($filename), '%_\\') . '&quot;%']],
+                    ['content' => ['LIKE', '%„' . addcslashes(htmlescape($filename), '%_\\') . '“%']],
+                ]],
             ],
             'LIMIT' => 1,
         ]);
