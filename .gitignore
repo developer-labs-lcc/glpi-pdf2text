@@ -16,3 +16,5 @@ composer.lock
 # temporary and conflict files of the Unison file sync
 .unison.*
 *(conflict_on_*)*
+# Personal VS Code workspace file (editor setting, not part of the plugin)
+*.code-workspace

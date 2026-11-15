@@ -52,6 +52,7 @@
    </versions>
    <langs>
       <lang>en_GB</lang>
+      <lang>en_US</lang>
       <lang>de_DE</lang>
    </langs>
    <license>GPL-3.0-or-later</license>

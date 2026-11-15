@@ -88,6 +88,12 @@ php tests/php/ExtractorTest.php   # text extraction only, also runs without GLPI
 instance, and purges them at the end. `ConfigTest` checks the configuration page (saving, access,
 CSRF token field only on GLPI 11) and restores the settings afterwards.
 
+Languages: German (`de_DE`) and English (`en_GB`, `en_US`; same texts as the source). A file for
+every English variant GLPI offers is needed: for a language without a file, GLPI loads the plugin
+texts in the default language of the system (e.g. German), while its own texts follow the user's
+language. After a change of a `.po` file, compile it with `msgfmt -o locales/<lang>.mo
+locales/<lang>.po` and run `bin/console cache:clear` in GLPI.
+
 Code style and static analysis follow Teclib's plugin template. They need the plugin in the
 `plugins/pdf2text` directory of a GLPI development checkout (`composer install` in GLPI):
 
@@ -105,6 +111,33 @@ Code style and static analysis follow Teclib's plugin template. They need the pl
 3. Create a GitHub release with the tag `<version>` and attach both archives.
 
 The plugin catalog reads `pdf2text.xml` from the `main` branch.
+
+### File headers
+
+Every file starts with a header (comment) naming the plugin, the address of the developer,
+copyright, license, the version of the file and its dates:
+
+```php
+/**
+ * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
+ *
+ * @link      https://developer-labs.com/en/glpi-development/
+ * @copyright Developer Labs LLC
+ * @license   GPL-3.0-or-later – see LICENSE
+ * @version   1.0.1
+ * @created   2026-10-22
+ * @changed   2026-11-15
+ */
+```
+
+`@created` is the day the file was created. Until the file has been committed for the first time,
+it stays at version 1.0.0 without `@changed`, however often it is edited. After that, a changed
+file gets `@changed` with the day of the last change and a higher `@version` (each file has its
+own version, starting with 1.0.0):
+
+- last digit + 1 (1.0.0 → 1.0.1): bug fixes and small changes,
+- middle digit + 1 (1.0.1 → 1.1.0): larger changes,
+- first digit + 1 (1.1.0 → 2.0.0): the file was extended a lot or rewritten.
 
 ## License
 

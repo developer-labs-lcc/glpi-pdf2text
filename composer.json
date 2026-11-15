@@ -1,6 +1,6 @@
 {
     "name": "developer-labs/glpi-pdf2text",
-    "description": "PDF2Text – copies the text of PDF attachments into GLPI 11 tickets, changes and problems",
+    "description": "PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems (GLPI 11 and 12)",
     "type": "glpi-plugin",
     "license": "GPL-3.0-or-later",
     "authors": [

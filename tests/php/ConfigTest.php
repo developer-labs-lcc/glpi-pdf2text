@@ -3,8 +3,12 @@
 /**
  * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
  *
+ * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
+ * @version   1.0.1
+ * @created   2026-10-23
+ * @changed   2026-11-15
  */
 
 // Configuration page: rendering, CSRF token field only where GLPI uses tokens (GLPI 11, not 12),

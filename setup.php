@@ -3,8 +3,12 @@
 /**
  * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
  *
+ * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
+ * @version   1.0.1
+ * @created   2026-10-22
+ * @changed   2026-11-15
  */
 
 use Glpi\Plugin\Hooks;
@@ -13,7 +17,7 @@ use GlpiPlugin\Pdf2text\DocumentHandler;
 /** @phpstan-ignore theCodingMachineSafe.function (safe to assume this isn't already defined) */
 define('PLUGIN_PDF2TEXT_VERSION', '1.0.0');
 
-// Minimal GLPI version, inclusive. No upper bound on purpose.
+// Minimal GLPI version, inclusive. No upper bound on purpose (tested with GLPI 11 and 12).
 /** @phpstan-ignore theCodingMachineSafe.function (safe to assume this isn't already defined) */
 define('PLUGIN_PDF2TEXT_MIN_GLPI', '11.0.0');
 

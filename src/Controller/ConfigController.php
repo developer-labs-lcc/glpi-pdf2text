@@ -3,8 +3,12 @@
 /**
  * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
  *
+ * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
+ * @version   1.0.1
+ * @created   2026-10-22
+ * @changed   2026-11-15
  */
 
 namespace GlpiPlugin\Pdf2text\Controller;
