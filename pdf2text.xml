@@ -5,33 +5,39 @@
    <logo>https://raw.githubusercontent.com/developer-labs-lcc/glpi-pdf2text/main/pics/logo_40.png</logo>
    <description>
       <short>
-         <en>Copies the text of PDF attachments into tickets, changes and problems, so it can be read and searched.</en>
-         <de>Kopiert den Text von PDF-Anhängen in Tickets, Changes und Problems, damit er lesbar und durchsuchbar ist.</de>
-         <fr>Copie le texte des pièces jointes PDF dans les tickets, changements et problèmes, pour le lire et le rechercher.</fr>
+         <en>Copies the text of PDF, Word and OpenDocument attachments into tickets, changes and problems, so it can be read and searched.</en>
+         <de>Kopiert den Text von PDF-, Word- und OpenDocument-Anhängen in Tickets, Changes und Problems, damit er lesbar und durchsuchbar ist.</de>
+         <fr>Copie le texte des pièces jointes PDF, Word et OpenDocument dans les tickets, changements et problèmes, pour le lire et le rechercher.</fr>
       </short>
       <long>
-         <en><![CDATA[<p>When a PDF is attached to a ticket, change or problem – by the mail collector, the form or the API – PDF2Text adds its text as a followup (private by default). The text can be read in the timeline without opening the file and is found by the search (Followups &gt; Description).</p>
+         <en><![CDATA[<p>When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, change or problem – by the mail collector, the form or the API – PDF2Text adds its text as a followup (private by default). The text can be read in the timeline without opening the file and is found by the search (Followups &gt; Description).</p>
 <ul>
-<li>Works for new tickets from the mail collector, reply mails, and PDFs attached to followups, tasks and solutions.</li>
+<li>Works for new tickets from the mail collector, reply mails, and files attached to followups, tasks and solutions.</li>
+<li>A file attached again (e.g. quoted by a reply mail) adds no second followup.</li>
+<li>Files attached before: massive action in the lists of tickets, changes and problems, and a console command.</li>
 <li>Uses pdftotext (poppler-utils) when installed, which keeps tables and columns; otherwise a bundled PHP parser.</li>
 <li>No notification for the added followup, solved tickets are not reopened.</li>
-<li>Configurable: item types, private followup, maximum length, path of pdftotext.</li>
+<li>Configurable: item types, file types, private followup, maximum length, path of pdftotext.</li>
 <li>Scanned PDFs without a text layer are skipped (no OCR).</li>
 </ul>]]></en>
-         <de><![CDATA[<p>Wird an ein Ticket, einen Change oder ein Problem ein PDF angehängt – per Mail-Collector, Formular oder API –, fügt PDF2Text dessen Text als Folgebeitrag hinzu (standardmäßig privat). Der Text ist in der Zeitleiste lesbar, ohne die Datei zu öffnen, und wird von der Suche gefunden (Folgebeiträge &gt; Beschreibung).</p>
+         <de><![CDATA[<p>Wird an ein Ticket, einen Change oder ein Problem ein PDF, ein Word-Dokument (DOCX) oder ein OpenDocument-Text (ODT) angehängt – per Mail-Collector, Formular oder API –, fügt PDF2Text dessen Text als Folgebeitrag hinzu (standardmäßig privat). Der Text ist in der Zeitleiste lesbar, ohne die Datei zu öffnen, und wird von der Suche gefunden (Folgebeiträge &gt; Beschreibung).</p>
 <ul>
-<li>Funktioniert bei neuen Tickets aus dem Mail-Collector, bei Antwort-Mails und bei PDFs an Folgebeiträgen, Aufgaben und Lösungen.</li>
+<li>Funktioniert bei neuen Tickets aus dem Mail-Collector, bei Antwort-Mails und bei Dateien an Folgebeiträgen, Aufgaben und Lösungen.</li>
+<li>Eine erneut angehängte Datei (z. B. in einer Antwort-Mail zitiert) ergibt keinen zweiten Folgebeitrag.</li>
+<li>Früher angehängte Dateien: Massenaktion in den Listen der Tickets, Changes und Problems sowie ein Konsolenbefehl.</li>
 <li>Nutzt pdftotext (poppler-utils), wenn installiert – Tabellen und Spalten bleiben erhalten; sonst einen mitgelieferten PHP-Parser.</li>
 <li>Keine Benachrichtigung für den Folgebeitrag, gelöste Tickets werden nicht wieder geöffnet.</li>
-<li>Einstellbar: Objekttypen, privater Folgebeitrag, maximale Länge, Pfad zu pdftotext.</li>
+<li>Einstellbar: Objekttypen, Dateitypen, privater Folgebeitrag, maximale Länge, Pfad zu pdftotext.</li>
 <li>Gescannte PDFs ohne Textebene werden übersprungen (keine Texterkennung).</li>
 </ul>]]></de>
-         <fr><![CDATA[<p>Lorsqu'un PDF est joint à un ticket, un changement ou un problème – par le collecteur de courriels, le formulaire ou l'API –, PDF2Text ajoute son texte sous forme de suivi (privé par défaut). Le texte est lisible dans la chronologie sans ouvrir le fichier et il est trouvé par la recherche (Suivis &gt; Description).</p>
+         <fr><![CDATA[<p>Lorsqu'un fichier PDF, Word (DOCX) ou OpenDocument (ODT) est joint à un ticket, un changement ou un problème – par le collecteur de courriels, le formulaire ou l'API –, PDF2Text ajoute son texte sous forme de suivi (privé par défaut). Le texte est lisible dans la chronologie sans ouvrir le fichier et il est trouvé par la recherche (Suivis &gt; Description).</p>
 <ul>
-<li>Fonctionne pour les nouveaux tickets du collecteur, les réponses par courriel et les PDF joints aux suivis, tâches et solutions.</li>
+<li>Fonctionne pour les nouveaux tickets du collecteur, les réponses par courriel et les fichiers joints aux suivis, tâches et solutions.</li>
+<li>Un fichier joint à nouveau (p. ex. cité dans une réponse par courriel) n'ajoute pas de second suivi.</li>
+<li>Fichiers joints auparavant : action de masse dans les listes des tickets, changements et problèmes, et une commande console.</li>
 <li>Utilise pdftotext (poppler-utils) s'il est installé, ce qui conserve tableaux et colonnes ; sinon un analyseur PHP fourni.</li>
 <li>Aucune notification pour le suivi ajouté, les tickets résolus ne sont pas rouverts.</li>
-<li>Paramétrable : types d'objets, suivi privé, longueur maximale, chemin de pdftotext.</li>
+<li>Paramétrable : types d'objets, types de fichiers, suivi privé, longueur maximale, chemin de pdftotext.</li>
 <li>Les PDF numérisés sans couche texte sont ignorés (pas d'OCR).</li>
 </ul>]]></fr>
       </long>

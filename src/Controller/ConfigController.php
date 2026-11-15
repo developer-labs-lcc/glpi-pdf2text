@@ -1,12 +1,12 @@
 <?php
 
 /**
- * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
+ * PDF2Text – copies the text of PDF, Word and OpenDocument attachments into GLPI tickets, changes and problems.
  *
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.1
+ * @version   1.1.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -17,6 +17,7 @@ use Config;
 use Glpi\Controller\AbstractController;
 use Glpi\Exception\Http\AccessDeniedHttpException;
 use GlpiPlugin\Pdf2text\Cast;
+use GlpiPlugin\Pdf2text\OfficeTextExtractor;
 use GlpiPlugin\Pdf2text\PdfTextExtractor;
 use GlpiPlugin\Pdf2text\Settings;
 use Session;
@@ -48,7 +49,8 @@ final class ConfigController extends AbstractController
                 'is_private' => $request->request->getBoolean('is_private') ? 1 : 0,
                 'max_chars'  => max(1000, min(1000000, $request->request->getInt('max_chars', Settings::DEFAULTS['max_chars']))),
             ];
-            foreach (array_keys(Settings::ITEMTYPES) as $key) {
+            // Checkboxes of the item types and of the file types
+            foreach ([...array_keys(Settings::ITEMTYPES), ...array_keys(Settings::FILETYPES)] as $key) {
                 $values[$key] = $request->request->getBoolean($key) ? 1 : 0;
             }
             // Only an absolute path is accepted; the program is started without a shell.
@@ -73,6 +75,8 @@ final class ConfigController extends AbstractController
             'action'   => $action,
             'settings' => $settings,
             'method'   => (new PdfTextExtractor(Cast::string($settings['pdftotext_path'])))->getMethod(),
+            // DOCX and ODT need the PHP extensions zip and xmlreader
+            'office_ok' => OfficeTextExtractor::isAvailable(),
             'csrf_token' => self::getCsrfToken(),
         ]);
     }

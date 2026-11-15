@@ -1,35 +1,72 @@
 # PDF2Text – GLPI plugin
 
-Copies the text of PDF attachments into GLPI **tickets, changes and problems**, so it can be
-read in the timeline and found with the search, without opening the attachment.
+Copies the text of **PDF, Word (DOCX) and OpenDocument (ODT)** attachments into GLPI **tickets,
+changes and problems**, so it can be read in the timeline and found with the search, without
+opening the attachment.
 
 Typical use: a third party sends notifications as PDF attachments by mail. The mail collector
 creates the ticket, and the plugin adds the text of the PDF as a followup.
 
 ## How it works
 
-- Every time a PDF is linked to a ticket, change or problem, the plugin reads its text and adds
-  it as a **followup** (private by default). This covers:
+- Every time a PDF, DOCX or ODT file is linked to a ticket, change or problem, the plugin reads
+  its text and adds it as a **followup** (private by default). This covers:
   - new tickets from the **mail collector** and the web form,
-  - **reply mails** and followups, tasks or solutions with a PDF (the text goes to their
+  - **reply mails** and followups, tasks or solutions with a file (the text goes to their
     ticket, change or problem),
   - documents added through the API.
-- The text is read with **`pdftotext`** (package `poppler-utils`) if it is installed, which keeps
+- PDFs are read with **`pdftotext`** (package `poppler-utils`) if it is installed, which keeps
   tables and columns. Otherwise the bundled PHP parser
   ([smalot/pdfparser](https://github.com/smalot/pdfparser)) is used, so the plugin also works on
   hosting without shell access.
+- Word and OpenDocument files are read by the plugin itself (no extra program): paragraphs
+  become lines, table rows become lines with the cells separated by tabs. Headers, footers,
+  footnotes, comments and deleted text of tracked changes are left out.
+- **No duplicates:** each file is read only once per ticket, change or problem. The same file
+  attached again – e.g. a reply mail that quotes the PDF of the first mail – adds no second
+  followup. Files are recognised by their checksum, not by their name: a new file with an old
+  name (e.g. this month's `report.pdf`) is read. If the text followup is deleted, the file
+  counts as not read again.
 - **Scanned PDFs** (images without a text layer) are skipped – there is no OCR.
 - The followup does **not** send notifications and does **not** reopen solved tickets.
-- Problems (unreadable or broken PDFs) are logged to `files/_log/pdf2text.log`; the ticket is
+- Problems (unreadable or broken files) are logged to `files/_log/pdf2text.log`; the ticket is
   created in any case.
 
 Searching: in the ticket list, use the search criterion **Followups > Description** (it contains
-the PDF text) or the global search.
+the text of the files) or the global search.
+
+## Files attached before
+
+Files attached before the plugin was enabled (or while their item type or file type was switched
+off) are not read automatically. Their text can be added afterwards; files read before are
+skipped, so both ways can be repeated at any time:
+
+- **Massive action:** in the list of tickets, changes or problems, choose the items and use
+  **Actions > Copy the text of the attachments (PDF2Text)**. Offered to users who may change the
+  GLPI configuration, for the item types switched on in the settings.
+- **Console command** on the server, in the GLPI directory:
+
+  ```sh
+  php bin/console plugins:pdf2text:process --dry-run           # only count what would be read
+  php bin/console plugins:pdf2text:process                     # all tickets, changes, problems
+  php bin/console plugins:pdf2text:process --since=2026-01-01  # opened on or after this day
+  php bin/console plugins:pdf2text:process -t Ticket --id=42   # one ticket
+  ```
+
+  Options: `--itemtype` / `-t` (`Ticket`, `Change` or `Problem`; default: the types switched on),
+  `--id` (with `--itemtype`), `--since` / `-s` (day `YYYY-MM-DD`), `--limit` / `-l` (number of
+  items), `--dry-run`, `-v` (one line per item, also for those without anything new). Run it as
+  the user of the web server (e.g. `sudo -u www-data php bin/console …`), so that the log file
+  stays writable for GLPI.
+
+Followups written by versions of the plugin before this tracking are recognised as well (by the
+file name in their heading and the text block), so these files are not read a second time.
 
 ## Requirements
 
 - GLPI 11.0 or later (tested with 11.0.9 and 12.0.0)
-- PHP 8.2 or later
+- PHP 8.2 or later; for Word and OpenDocument the PHP extensions `zip` and `xmlreader` (both
+  usually installed; the configuration page warns if they are missing)
 - Recommended: `pdftotext` (`apt install poppler-utils` / `dnf install poppler-utils`)
 
 ## Installation
@@ -55,6 +92,10 @@ composer install --no-dev
 The directory must be named `pdf2text` (the technical key of the plugin). Then enable the plugin in
 **Setup > Plugins** (install, then enable).
 
+The plugin creates one table, `glpi_plugin_pdf2text_processedfiles`: which file (checksum) was read
+for which ticket, change or problem, and the followup with its text. Uninstalling removes it
+together with the settings.
+
 ## Configuration
 
 **Setup > Plugins > PDF2Text** (requires the right to change the GLPI configuration):
@@ -62,18 +103,21 @@ The directory must be named `pdf2text` (the technical key of the plugin). Then e
 | Setting | Default | Meaning |
 |---|---|---|
 | Add the text to | Tickets, Changes, Problems | Item types the text is added to |
+| Read these file types | PDF, Word (DOCX), OpenDocument text (ODT) | File types that are read |
 | Private followup | on | Followup visible to technicians only |
-| Maximum length of the text | 20000 | Longer texts are shortened; the full text stays in the PDF |
+| Maximum length of the text | 20000 | Longer texts are shortened; the full text stays in the file |
 | Path of pdftotext | empty | Empty = search `/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin` |
 
-The page also shows which method (pdftotext or PHP parser) is in use.
+The page also shows which method (pdftotext or PHP parser) is used for PDFs, and how to add the
+text of files attached before.
 
 ## Limits
 
-- PDFs attached **before** the plugin was enabled are not processed.
-- The PHP parser only reads files up to 20 MB; larger ones need `pdftotext`.
+- The PHP parser only reads PDFs up to 20 MB; larger ones need `pdftotext`.
 - `pdftotext` is stopped after 30 seconds.
-- PDFs that need a password to open, and other file types (Word, images, ...), are not read.
+- Word and OpenDocument files whose text is larger than 50 MB unpacked are not read.
+- Files that need a password to open, the old Word format (`.doc`), spreadsheets,
+  presentations and images are not read.
 
 ## Development
 
@@ -84,8 +128,10 @@ tests/run.sh                 # all tests; the GLPI tests need the plugin install
 php tests/php/ExtractorTest.php   # text extraction only, also runs without GLPI
 ```
 
-`HandlerTest` boots GLPI and creates its own tickets, changes and documents in the database of the
-instance, and purges them at the end. `ConfigTest` checks the configuration page (saving, access,
+`ExtractorTest` also reads the Word and OpenDocument fixtures (`tests/fixtures/change.docx`,
+`change.odt`). `HandlerTest` boots GLPI and creates its own tickets, changes and documents in the
+database of the instance, and purges them at the end; it also covers files attached again, the
+processing of files attached before, the console command and the massive action. `ConfigTest` checks the configuration page (saving, access,
 CSRF token field only on GLPI 11) and restores the settings afterwards.
 
 Languages: German (`de_DE`) and English (`en_GB`, `en_US`; same texts as the source). A file for

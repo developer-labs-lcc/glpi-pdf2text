@@ -3,12 +3,12 @@
 use Glpi\Kernel\Kernel;
 
 /**
- * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
+ * PDF2Text – copies the text of PDF, Word and OpenDocument attachments into GLPI tickets, changes and problems.
  *
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.1
+ * @version   1.1.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -144,6 +144,33 @@ function upload(string $fixture): string
     $data = file_get_contents(dirname(__DIR__) . '/fixtures/' . $fixture);
     file_put_contents(GLPI_TMP_DIR . '/' . $name, $data . "\n%" . run_id() . '-' . bin2hex(random_bytes(4)) . "\n");
     return $name;
+}
+
+/**
+ * Like upload(), but the same fixture gives the same content within one run (same checksum),
+ * as when a reply mail attaches the PDF of the first mail again.
+ */
+function upload_same(string $fixture, int $copy): string
+{
+    $name = run_id() . "-$copy-" . $fixture;
+    $data = file_get_contents(dirname(__DIR__) . '/fixtures/' . $fixture);
+    file_put_contents(GLPI_TMP_DIR . '/' . $name, $data . "\n%" . run_id() . "\n");
+    return $name;
+}
+
+/**
+ * Followups of an ITIL object whose content contains the given text.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function followups_with(CommonITILObject $item, string $text): array
+{
+    global $DB;
+
+    return iterator_to_array($DB->request([
+        'FROM'  => ITILFollowup::getTable(),
+        'WHERE' => ['itemtype' => $item::class, 'items_id' => $item->getID(), 'content' => ['LIKE', '%' . $text . '%']],
+    ]), false);
 }
 
 /**

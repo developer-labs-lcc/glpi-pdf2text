@@ -5,7 +5,16 @@
 - First version: the text of PDF attachments is added as a followup to tickets, changes and problems
   (mail collector, form, API; also PDFs in followups, tasks and solutions).
 - Text extraction with pdftotext (poppler-utils) or, as a fallback, the bundled PHP parser.
-- Configuration page: item types, private followup, maximum length, path of pdftotext.
+- Word (DOCX) and OpenDocument (ODT) files are read as well (without extra program; tables kept
+  as lines with tab-separated cells, comments and deleted text left out); file types can be
+  switched off one by one.
+- No second followup for a file attached again to the same ticket, change or problem (recognised
+  by its checksum; table `glpi_plugin_pdf2text_processedfiles`). Followups written before are
+  recognised by their content.
+- Files attached before: massive action "Copy the text of the attachments (PDF2Text)" in the lists
+  of tickets, changes and problems, and the console command `plugins:pdf2text:process`
+  (with `--dry-run`, `--since`, `--itemtype`, `--id`, `--limit`).
+- Configuration page: item types, file types, private followup, maximum length, path of pdftotext.
 - Compatible with GLPI 11 and 12: the CSRF token is only sent where GLPI 11 needs it (GLPI 12
   checks the origin of requests instead).
 - Translations: English (`en_GB`, `en_US`), German.

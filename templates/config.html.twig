@@ -1,10 +1,10 @@
 {#
- # PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
+ # PDF2Text – copies the text of PDF, Word and OpenDocument attachments into GLPI tickets, changes and problems.
  #
  # @link      https://developer-labs.com/en/glpi-development/
  # @copyright Developer Labs LLC
  # @license   GPL-3.0-or-later – see LICENSE
- # @version   1.0.1
+ # @version   1.1.0
  # @created   2026-10-22
  # @changed   2026-11-15
  #}
@@ -13,7 +13,25 @@
 <form method="post" action="{{ action }}" class="card">
     <div class="card-header"><h3 class="card-title"><i class="ti ti-file-text me-1"></i>{{ __('PDF2Text – configuration', 'pdf2text') }}</h3></div>
     <div class="card-body">
-        <div class="alert alert-info">{{ __('When a PDF is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. Scanned PDFs without a text layer are skipped.', 'pdf2text') }}</div>
+        <div class="alert alert-info">{{ __('When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. A file attached again to the same ticket adds no second followup. Scanned PDFs without a text layer are skipped.', 'pdf2text') }}</div>
+
+        <h4>{{ __('Read these file types', 'pdf2text') }}</h4>
+        <div class="mb-3">
+            {% for key, label in {
+                type_pdf: 'PDF',
+                type_docx: __('Word (DOCX)', 'pdf2text'),
+                type_odt: __('OpenDocument text (ODT)', 'pdf2text'),
+            } %}
+                <div class="form-check form-check-inline">
+                    <input type="hidden" name="{{ key }}" value="0">
+                    <input class="form-check-input" type="checkbox" id="pt-{{ key }}" name="{{ key }}" value="1" {{ settings[key] ? 'checked' }}>
+                    <label class="form-check-label" for="pt-{{ key }}">{{ label }}</label>
+                </div>
+            {% endfor %}
+            {% if not office_ok %}
+                <div class="form-hint text-danger">{{ __('Word and OpenDocument files need the PHP extensions zip and xmlreader, which are missing on this server.', 'pdf2text') }}</div>
+            {% endif %}
+        </div>
 
         <h4>{{ __('Add the text to', 'pdf2text') }}</h4>
         <div class="mb-3">
@@ -52,6 +70,12 @@
                 <div class="form-control-plaintext font-monospace">{{ method }}</div>
             </div>
         </div>
+
+        <h4 class="mt-4">{{ __('Files attached before', 'pdf2text') }}</h4>
+        <p class="mb-1">{{ __('Files attached before the plugin was enabled are not read automatically. To add their text, choose the tickets, changes or problems in their list and use the action "Copy the text of the attachments (PDF2Text)", or run on the server:', 'pdf2text') }}</p>
+        <pre class="mb-1">php bin/console plugins:pdf2text:process --dry-run
+php bin/console plugins:pdf2text:process --since=2026-01-01</pre>
+        <div class="form-hint">{{ __('Files read before are skipped, so this can be repeated at any time.', 'pdf2text') }}</div>
     </div>
     <div class="card-footer">
         {% if csrf_token %}

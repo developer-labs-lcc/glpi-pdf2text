@@ -1,12 +1,12 @@
 <?php
 
 /**
- * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
+ * PDF2Text – copies the text of PDF, Word and OpenDocument attachments into GLPI tickets, changes and problems.
  *
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.1
+ * @version   1.1.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -33,10 +33,24 @@ final class Settings
         'on_problem' => Problem::class,
     ];
 
+    /**
+     * File types that are read (key = setting name): file name extensions and MIME types.
+     * DOCX and ODT are read by OfficeTextExtractor, PDF by PdfTextExtractor.
+     */
+    public const FILETYPES = [
+        'type_pdf'  => ['format' => 'pdf', 'extension' => 'pdf', 'mime' => 'application/pdf'],
+        'type_docx' => ['format' => OfficeTextExtractor::DOCX, 'extension' => 'docx', 'mime' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        'type_odt'  => ['format' => OfficeTextExtractor::ODT, 'extension' => 'odt', 'mime' => 'application/vnd.oasis.opendocument.text'],
+    ];
+
     public const DEFAULTS = [
         'on_ticket'      => 1,
         'on_change'      => 1,
         'on_problem'     => 1,
+        // File types that are read
+        'type_pdf'       => 1,
+        'type_docx'      => 1,
+        'type_odt'       => 1,
         // The extracted text is added as a private followup (only visible to technicians).
         'is_private'     => 1,
         // Longer texts are cut off; the full text stays in the PDF.
@@ -94,6 +108,22 @@ final class Settings
         $key = array_search($itemtype, self::ITEMTYPES, true);
 
         return $key !== false && (bool) self::get($key);
+    }
+
+    /**
+     * Format of a file ("pdf", "docx" or "odt") if its type is switched on, otherwise null.
+     * The file name extension counts, or else the MIME type GLPI found.
+     */
+    public static function formatOf(string $filename, string $mime): ?string
+    {
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        foreach (self::FILETYPES as $key => $type) {
+            if (($extension === $type['extension'] || $mime === $type['mime']) && (bool) self::get($key)) {
+                return $type['format'];
+            }
+        }
+
+        return null;
     }
 
     public static function reset(): void

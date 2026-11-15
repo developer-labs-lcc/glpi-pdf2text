@@ -1,26 +1,35 @@
 <?php
 
 /**
- * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
+ * PDF2Text – copies the text of PDF, Word and OpenDocument attachments into GLPI tickets, changes and problems.
  *
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.1
+ * @version   1.1.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
 
 // Integration with GLPI: new ticket with a PDF (as created by the mail collector), scanned
 // PDF, non-PDF attachment, PDF in a reply followup of a solved ticket, PDF in a task, change,
-// disabled item type, private flag and search by followup content.
+// disabled item type, private flag and search by followup content; Word and OpenDocument files;
+// no second followup for a file attached again; files attached before (processItem(), console
+// command, massive action).
 //
 // The plugin settings are changed for the test and restored.
 
 require __DIR__ . '/bootstrap.php';
 
+/** @var DBmysql $DB */
+global $DB;
+
+use GlpiPlugin\Pdf2text\Console\ProcessCommand;
 use GlpiPlugin\Pdf2text\DocumentHandler;
+use GlpiPlugin\Pdf2text\MassiveActions;
+use GlpiPlugin\Pdf2text\ProcessedFiles;
 use GlpiPlugin\Pdf2text\Settings;
+use Symfony\Component\Console\Tester\CommandTester;
 
 $rid = run_id();
 $original_settings = [];
@@ -28,7 +37,7 @@ foreach (array_keys(Settings::DEFAULTS) as $key) {
     $original_settings[$key] = Settings::get($key);
 }
 register_shutdown_function(static fn() => Settings::set($original_settings));
-Settings::set(['on_ticket' => 1, 'on_change' => 1, 'on_problem' => 1, 'is_private' => 1]);
+Settings::set(['on_ticket' => 1, 'on_change' => 1, 'on_problem' => 1, 'is_private' => 1, 'type_pdf' => 1, 'type_docx' => 1, 'type_odt' => 1]);
 
 /**
  * Creates an ITIL object with the given fixtures attached, the same way the mail collector does.
@@ -119,5 +128,137 @@ $problem = $create(Problem::class, 'PDF problem', ['change.pdf']);
 check('problem with setting off: no followup', count(pdf_followups($problem)) === 0);
 $public = $create(Ticket::class, 'Public ticket', ['change.pdf']);
 check('setting "private" off: public followup', (int) (pdf_followups($public)[0]['is_private'] ?? 1) === 0);
+
+Settings::set(['on_problem' => 1, 'is_private' => 1]);
+
+section('Word and OpenDocument');
+$office = $create(Ticket::class, 'Office ticket', ['change.docx', 'change.odt']);
+$office_followups = followups_with($office, 'OKAPI-0815');
+check('one followup each for DOCX and ODT', count($office_followups) === 2, (string) count($office_followups));
+check('heading names the file', count(followups_with($office, 'Text of the attachment &quot;' . run_id() . '-change.docx')) === 1
+    || count(followups_with($office, 'Text of the attachment "' . run_id() . '-change.docx')) === 1);
+check('table row kept in the text', count(followups_with($office, "Core router R1\tOutage 15 min")) === 2);
+Settings::set(['type_docx' => 0]);
+$no_docx = $create(Ticket::class, 'DOCX off ticket', ['change.docx', 'change.odt']);
+check('file type switched off: only the ODT is read', count(followups_with($no_docx, 'OKAPI-0815')) === 1);
+Settings::set(['type_docx' => 1]);
+
+section('same file attached again');
+$again = $create(Ticket::class, 'Again ticket', []);
+foreach ([1, 2] as $round) {
+    // The same PDF in two reply mails (GLPI links the existing document again: same checksum)
+    DocumentHandler::reset();
+    (new ITILFollowup())->add([
+        'itemtype'  => Ticket::class,
+        'items_id'  => $again->getID(),
+        'content'   => "Reply $round with the same PDF",
+        '_filename' => [upload_same('change.pdf', $round)],
+    ]);
+}
+check('same PDF in two reply mails: one text followup', count(pdf_followups($again)) === 1, (string) count(pdf_followups($again)));
+DocumentHandler::reset();
+(new ITILFollowup())->add([
+    'itemtype'  => Ticket::class,
+    'items_id'  => $again->getID(),
+    'content'   => 'Reply with a new PDF of the same name',
+    '_filename' => [upload('change.pdf')],
+]);
+check('new file with the same name: a second text followup', count(pdf_followups($again)) === 2, (string) count(pdf_followups($again)));
+$rows = count($DB->request(['FROM' => ProcessedFiles::TABLE, 'WHERE' => ['itemtype' => Ticket::class, 'items_id' => $again->getID()]]));
+check('two files remembered for the ticket', $rows === 2, (string) $rows);
+
+section('files attached before (processItem)');
+Settings::set(['on_ticket' => 0]);
+$before = $create(Ticket::class, 'Before ticket', ['change.pdf', 'change.odt', 'scan.pdf', 'notes.txt']);
+check('type switched off: nothing added on creation', count(followups_with($before, '<pre>')) === 0);
+Settings::set(['on_ticket' => 1]);
+DocumentHandler::reset();
+$task = new TicketTask();
+$task_id = $task->add(['tickets_id' => $before->getID(), 'content' => 'Task with a DOCX', '_filename' => [upload('change.docx')]]);
+check('DOCX in a new task is read at once', count(followups_with($before, 'OKAPI-0815')) === 1);
+DocumentHandler::reset();
+$dry = DocumentHandler::processItem($before, true);
+check('dry run: PDF and ODT to read, DOCX read before', $dry[DocumentHandler::PENDING] === 3 && $dry[DocumentHandler::DONE] === 1, json_encode($dry) ?: '');
+check('dry run adds nothing', count(followups_with($before, '<pre>')) === 1);
+DocumentHandler::reset();
+$counts = DocumentHandler::processItem($before);
+check('processItem: PDF and ODT added, scan without text', $counts[DocumentHandler::ADDED] === 2 && $counts[DocumentHandler::EMPTY] === 1 && $counts[DocumentHandler::DONE] === 1, json_encode($counts) ?: '');
+check('text followups now: PDF, ODT, DOCX', count(followups_with($before, '<pre>')) === 3);
+DocumentHandler::reset();
+$counts = DocumentHandler::processItem($before);
+check('second run: everything read before', $counts[DocumentHandler::ADDED] === 0 && $counts[DocumentHandler::DONE] === 4, json_encode($counts) ?: '');
+
+section('deleted text followup');
+$pdf_followup = pdf_followups($before)[0];
+(new ITILFollowup())->delete(['id' => $pdf_followup['id']], true);
+DocumentHandler::reset();
+$counts = DocumentHandler::processItem($before);
+check('after deleting the text followup the PDF is read again', $counts[DocumentHandler::ADDED] === 1, json_encode($counts) ?: '');
+
+section('followups of before the tracking');
+$old = $create(Ticket::class, 'Old ticket', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+$old_doc_followup = (new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $old->getID(), 'content' => 'Mail with a PDF', '_filename' => [upload_same('change.pdf', 3)]]);
+Settings::set(['on_ticket' => 1]);
+// A followup as an earlier version wrote it, dated before the tracking started
+$old_text = new ITILFollowup();
+$old_text_id = (int) $old_text->add(['itemtype' => Ticket::class, 'items_id' => $old->getID(), 'content' => '<p><strong>Text des PDF-Anhangs „' . htmlescape(run_id() . '-3-change.pdf') . '“</strong></p><pre>old text</pre>', '_disablenotif' => true]);
+$DB->update(ITILFollowup::getTable(), ['date_creation' => '2020-01-01 00:00:00'], ['id' => $old_text_id]);
+DocumentHandler::reset();
+$counts = DocumentHandler::processItem($old);
+check('followup of an earlier version (German heading) recognised', $counts[DocumentHandler::DONE] === 1 && $counts[DocumentHandler::ADDED] === 0, json_encode($counts) ?: '');
+$DB->update(ITILFollowup::getTable(), ['date_creation' => date('Y-m-d H:i:s')], ['id' => $old_text_id]);
+DocumentHandler::reset();
+$counts = DocumentHandler::processItem($old);
+check('the same followup written after the tracking started does not count', $counts[DocumentHandler::ADDED] === 1, json_encode($counts) ?: '');
+
+section('console command');
+$cmd_ticket = $create(Ticket::class, 'Command ticket', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $cmd_ticket->getID(), 'content' => 'Mail', '_filename' => [upload('change.pdf')]]);
+Settings::set(['on_ticket' => 1]);
+$tester = new CommandTester(new ProcessCommand());
+$tester->execute(['--itemtype' => 'ticket', '--id' => (string) $cmd_ticket->getID(), '--dry-run' => true]);
+check('dry run reports the file', str_contains($tester->getDisplay(), '1 to read') && count(pdf_followups($cmd_ticket)) === 0, trim($tester->getDisplay()));
+$tester->execute(['--itemtype' => 'Ticket', '--id' => (string) $cmd_ticket->getID()]);
+check('command adds the text', $tester->getStatusCode() === 0 && count(pdf_followups($cmd_ticket)) === 1, trim($tester->getDisplay()));
+$tester->execute(['--itemtype' => 'Ticket', '--id' => (string) $cmd_ticket->getID()]);
+check('second run adds nothing', count(pdf_followups($cmd_ticket)) === 1 && str_contains($tester->getDisplay(), '1 read before'), trim($tester->getDisplay()));
+$tester->execute(['--itemtype' => 'Computer']);
+check('unknown type refused', $tester->getStatusCode() !== 0);
+
+section('massive action');
+$actions = MassiveActions::forItemtype(Ticket::class);
+check('offered for tickets', count($actions) === 1);
+Settings::set(['on_problem' => 0]);
+check('not offered for a type switched off', MassiveActions::forItemtype(Problem::class) === []);
+Settings::set(['on_problem' => 1]);
+check('not offered for other types', MassiveActions::forItemtype(Computer::class) === []);
+$ma_ticket = $create(Ticket::class, 'Massive ticket', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $ma_ticket->getID(), 'content' => 'Mail', '_filename' => [upload('change.odt')]]);
+Settings::set(['on_ticket' => 1]);
+DocumentHandler::reset();
+$ma = new MassiveAction([
+    // Step "process": GLPI has split "class:action" from the list into processor and action
+    'action'        => MassiveActions::ACTION,
+    'processor'     => MassiveActions::class,
+    'items'         => [Ticket::class => [$ma_ticket->getID() => $ma_ticket->getID()]],
+    'initial_items' => [Ticket::class => [$ma_ticket->getID() => $ma_ticket->getID()]],
+    'action_name'   => 'PDF2Text',
+    'is_deleted'    => 0,
+], [], 'process');
+MassiveActions::processMassiveActionsForOneItemtype($ma, new Ticket(), [$ma_ticket->getID()]);
+check('processor and action recognised', $ma->getAction() === MassiveActions::ACTION, $ma->getAction());
+check('massive action adds the text', count(followups_with($ma_ticket, 'OKAPI-0815')) === 1, json_encode($ma->results) ?: '');
+
+section('purge');
+$purge_id = $before->getID();
+check('rows exist before purge', count($DB->request(['FROM' => ProcessedFiles::TABLE, 'WHERE' => ['itemtype' => Ticket::class, 'items_id' => $purge_id]])) > 0);
+$before->delete(['id' => $purge_id], true);
+check('rows removed with the ticket', count($DB->request(['FROM' => ProcessedFiles::TABLE, 'WHERE' => ['itemtype' => Ticket::class, 'items_id' => $purge_id]])) === 0);
 
 finish();

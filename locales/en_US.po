@@ -26,9 +26,6 @@ msgstr "PDF2Text"
 msgid "PDF2Text – configuration"
 msgstr "PDF2Text – configuration"
 
-msgid "When a PDF is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. Scanned PDFs without a text layer are skipped."
-msgstr "When a PDF is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. Scanned PDFs without a text layer are skipped."
-
 msgid "Add the text to"
 msgstr "Add the text to"
 
@@ -46,3 +43,41 @@ msgstr "Leave empty to search the usual places. Without pdftotext (package poppl
 
 msgid "Method in use"
 msgstr "Method in use"
+
+msgid "When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. A file attached again to the same ticket adds no second followup. Scanned PDFs without a text layer are skipped."
+msgstr "When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. A file attached again to the same ticket adds no second followup. Scanned PDFs without a text layer are skipped."
+
+msgid "Read these file types"
+msgstr "Read these file types"
+
+msgid "Word (DOCX)"
+msgstr "Word (DOCX)"
+
+msgid "OpenDocument text (ODT)"
+msgstr "OpenDocument text (ODT)"
+
+msgid "Word and OpenDocument files need the PHP extensions zip and xmlreader, which are missing on this server."
+msgstr "Word and OpenDocument files need the PHP extensions zip and xmlreader, which are missing on this server."
+
+msgid "Files attached before"
+msgstr "Files attached before"
+
+msgid "Files attached before the plugin was enabled are not read automatically. To add their text, choose the tickets, changes or problems in their list and use the action \"Copy the text of the attachments (PDF2Text)\", or run on the server:"
+msgstr "Files attached before the plugin was enabled are not read automatically. To add their text, choose the tickets, changes or problems in their list and use the action \"Copy the text of the attachments (PDF2Text)\", or run on the server:"
+
+msgid "Files read before are skipped, so this can be repeated at any time."
+msgstr "Files read before are skipped, so this can be repeated at any time."
+
+#, php-format
+msgid "Text of the attachment \"%s\""
+msgstr "Text of the attachment \"%s\""
+
+msgid "Copy the text of the attachments (PDF2Text)"
+msgstr "Copy the text of the attachments (PDF2Text)"
+
+msgid "The text of PDF, Word and OpenDocument attachments that were not read yet is added as a followup."
+msgstr "The text of PDF, Word and OpenDocument attachments that were not read yet is added as a followup."
+
+#, php-format
+msgid "PDF2Text: %1$d followup(s) added, %2$d file(s) without text, %3$d file(s) not readable (see files/_log/pdf2text.log)."
+msgstr "PDF2Text: %1$d followup(s) added, %2$d file(s) without text, %3$d file(s) not readable (see files/_log/pdf2text.log)."
