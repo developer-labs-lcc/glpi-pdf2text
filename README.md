@@ -61,7 +61,9 @@ skipped, so both ways can be repeated at any time:
 
 - **Massive action:** in the list of tickets, changes or problems, choose the items and use
   **Actions > Copy the text of the attachments (PDF2Text)**. Offered to users who may change the
-  GLPI configuration, for the item types switched on in the settings.
+  GLPI configuration, for the item types switched on in the settings. Afterwards a message says
+  how many followups were added and how many files were copied before, had no text or could not
+  be read (a warning if a file could not be read).
 - **Console command** on the server, in the GLPI directory:
 
   ```sh

@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.2.0
+ * @version   1.2.1
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -245,7 +245,8 @@ DocumentHandler::reset();
 (new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $ma_ticket->getID(), 'content' => 'Mail', '_filename' => [upload('change.odt')]]);
 Settings::set(['on_ticket' => 1]);
 DocumentHandler::reset();
-$ma = new MassiveAction([
+// A new MassiveAction per run: GLPI ticks its items off as they are done
+$new_ma = static fn(): MassiveAction => new MassiveAction([
     // Step "process": GLPI has split "class:action" from the list into processor and action
     'action'        => MassiveActions::ACTION,
     'processor'     => MassiveActions::class,
@@ -254,9 +255,25 @@ $ma = new MassiveAction([
     'action_name'   => 'PDF2Text',
     'is_deleted'    => 0,
 ], [], 'process');
+$ma = $new_ma();
+$_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
 MassiveActions::processMassiveActionsForOneItemtype($ma, new Ticket(), [$ma_ticket->getID()]);
 check('processor and action recognised', $ma->getAction() === MassiveActions::ACTION, $ma->getAction());
 check('massive action adds the text', count(followups_with($ma_ticket, 'OKAPI-0815')) === 1, json_encode($ma->results) ?: '');
+// GLPI shows the messages of $ma->addMessage() as errors: the summary must be an info instead
+$infos = $_SESSION['MESSAGE_AFTER_REDIRECT'][INFO] ?? [];
+check('summary shown as info, not as error', $infos === ['PDF2Text: 1 followup added'] && ($ma->results['messages'] ?? []) === []
+    && empty($_SESSION['MESSAGE_AFTER_REDIRECT'][ERROR]), json_encode($_SESSION['MESSAGE_AFTER_REDIRECT']) ?: '');
+$_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
+MassiveActions::processMassiveActionsForOneItemtype($new_ma(), new Ticket(), [$ma_ticket->getID()]);
+check('second run: "copied before"', ($_SESSION['MESSAGE_AFTER_REDIRECT'][INFO] ?? []) === ['PDF2Text: 1 file was copied before'], json_encode($_SESSION['MESSAGE_AFTER_REDIRECT']) ?: '');
+$_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
+check('summary: plural and only numbers above 0', MassiveActions::summary([DocumentHandler::ADDED => 2, DocumentHandler::DONE => 0, DocumentHandler::EMPTY => 1, DocumentHandler::FAILED => 0]) === 'PDF2Text: 2 followups added, 1 file without text');
+check('summary: nothing found', MassiveActions::summary([DocumentHandler::ADDED => 0, DocumentHandler::DONE => 0, DocumentHandler::EMPTY => 0, DocumentHandler::FAILED => 0]) === 'PDF2Text: no attachments with text');
+Session::loadLanguage('de_DE');
+$german = MassiveActions::summary([DocumentHandler::ADDED => 2, DocumentHandler::DONE => 1, DocumentHandler::EMPTY => 0, DocumentHandler::FAILED => 3]);
+Session::loadLanguage('en_GB');
+check('summary in German', $german === 'PDF2Text: 2 Folgebeiträge hinzugefügt, 1 Datei war bereits übernommen, 3 Dateien konnten nicht gelesen werden (siehe files/_log/pdf2text.log)', $german);
 
 section('button at the attachment');
 $button_ticket = $create(Ticket::class, 'Button ticket', []);

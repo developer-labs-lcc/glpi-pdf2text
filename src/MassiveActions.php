@@ -6,7 +6,8 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.0
+ * @version   1.0.1
+ * @changed   2026-11-15
  * @created   2026-11-15
  */
 
@@ -80,7 +81,7 @@ final class MassiveActions
             return;
         }
 
-        $totals = [DocumentHandler::ADDED => 0, DocumentHandler::EMPTY => 0, DocumentHandler::FAILED => 0];
+        $totals = [DocumentHandler::ADDED => 0, DocumentHandler::EMPTY => 0, DocumentHandler::DONE => 0, DocumentHandler::FAILED => 0];
         foreach ($ids as $id) {
             if (!$item->getFromDB(Cast::int($id))) {
                 $ma->itemDone($item::class, Cast::int($id), MassiveAction::ACTION_KO);
@@ -93,11 +94,36 @@ final class MassiveActions
             $ma->itemDone($item::class, Cast::int($id), $counts[DocumentHandler::FAILED] > 0 ? MassiveAction::ACTION_KO : MassiveAction::ACTION_OK);
         }
 
-        $ma->addMessage(htmlescape(sprintf(
-            __('PDF2Text: %1$d followup(s) added, %2$d file(s) without text, %3$d file(s) not readable (see files/_log/pdf2text.log).', 'pdf2text'),
-            $totals[DocumentHandler::ADDED],
-            $totals[DocumentHandler::EMPTY],
-            $totals[DocumentHandler::FAILED],
-        )));
+        // Not with $ma->addMessage(): GLPI shows those messages as errors (front/massiveaction.php),
+        // also a summary of a successful run. Shown after GLPI's own "Operation successful".
+        Session::addMessageAfterRedirect(
+            htmlescape(self::summary($totals)),
+            false,
+            $totals[DocumentHandler::FAILED] > 0 ? WARNING : INFO,
+        );
+    }
+
+    /**
+     * E.g. "PDF2Text: 2 followups added, 1 file without text". Only the numbers above 0.
+     *
+     * @param array<string, int> $totals
+     */
+    public static function summary(array $totals): string
+    {
+        $parts = [];
+        if ($totals[DocumentHandler::ADDED] > 0) {
+            $parts[] = sprintf(_n('%d followup added', '%d followups added', $totals[DocumentHandler::ADDED], 'pdf2text'), $totals[DocumentHandler::ADDED]);
+        }
+        if ($totals[DocumentHandler::DONE] > 0) {
+            $parts[] = sprintf(_n('%d file was copied before', '%d files were copied before', $totals[DocumentHandler::DONE], 'pdf2text'), $totals[DocumentHandler::DONE]);
+        }
+        if ($totals[DocumentHandler::EMPTY] > 0) {
+            $parts[] = sprintf(_n('%d file without text', '%d files without text', $totals[DocumentHandler::EMPTY], 'pdf2text'), $totals[DocumentHandler::EMPTY]);
+        }
+        if ($totals[DocumentHandler::FAILED] > 0) {
+            $parts[] = sprintf(_n('%d file could not be read (see files/_log/pdf2text.log)', '%d files could not be read (see files/_log/pdf2text.log)', $totals[DocumentHandler::FAILED], 'pdf2text'), $totals[DocumentHandler::FAILED]);
+        }
+
+        return 'PDF2Text: ' . ($parts === [] ? __('no attachments with text', 'pdf2text') : implode(', ', $parts));
     }
 }

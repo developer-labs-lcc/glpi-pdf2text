@@ -78,10 +78,6 @@ msgstr "Copy the text of the attachments (PDF2Text)"
 msgid "The text of PDF, Word and OpenDocument attachments that were not read yet is added as a followup."
 msgstr "The text of PDF, Word and OpenDocument attachments that were not read yet is added as a followup."
 
-#, php-format
-msgid "PDF2Text: %1$d followup(s) added, %2$d file(s) without text, %3$d file(s) not readable (see files/_log/pdf2text.log)."
-msgstr "PDF2Text: %1$d followup(s) added, %2$d file(s) without text, %3$d file(s) not readable (see files/_log/pdf2text.log)."
-
 msgid "Copy the text into a followup (PDF2Text)"
 msgstr "Copy the text into a followup (PDF2Text)"
 
@@ -114,3 +110,30 @@ msgstr "The file could not be read (see files/_log/pdf2text.log)."
 
 msgid "The text was added as a followup."
 msgstr "The text was added as a followup."
+
+#, php-format
+msgid "%d followup added"
+msgid_plural "%d followups added"
+msgstr[0] "%d followup added"
+msgstr[1] "%d followups added"
+
+#, php-format
+msgid "%d file was copied before"
+msgid_plural "%d files were copied before"
+msgstr[0] "%d file was copied before"
+msgstr[1] "%d files were copied before"
+
+#, php-format
+msgid "%d file without text"
+msgid_plural "%d files without text"
+msgstr[0] "%d file without text"
+msgstr[1] "%d files without text"
+
+#, php-format
+msgid "%d file could not be read (see files/_log/pdf2text.log)"
+msgid_plural "%d files could not be read (see files/_log/pdf2text.log)"
+msgstr[0] "%d file could not be read (see files/_log/pdf2text.log)"
+msgstr[1] "%d files could not be read (see files/_log/pdf2text.log)"
+
+msgid "no attachments with text"
+msgstr "no attachments with text"
