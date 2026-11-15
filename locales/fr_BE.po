@@ -1,0 +1,139 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: GLPI plugin pdf2text 1.0.0\n"
+"Language: fr_BE\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "Run \"composer install --no-dev\" in the plugin directory first."
+msgstr "Exécutez d'abord « composer install --no-dev » dans le répertoire du plugin."
+
+#, php-format
+msgid "Text of the PDF attachment \"%s\""
+msgstr "Texte de la pièce jointe PDF « %s »"
+
+msgid "The text was shortened. The complete text is in the attachment."
+msgstr "Le texte a été raccourci. Le texte complet se trouve dans la pièce jointe."
+
+msgid "The configuration was saved."
+msgstr "La configuration a été enregistrée."
+
+msgid "PDF2Text"
+msgstr "PDF2Text"
+
+msgid "PDF2Text – configuration"
+msgstr "PDF2Text – configuration"
+
+msgid "Add the text to"
+msgstr "Ajouter le texte aux"
+
+msgid "Private followup (only visible to technicians)"
+msgstr "Suivi privé (visible uniquement par les techniciens)"
+
+msgid "Maximum length of the text (characters)"
+msgstr "Longueur maximale du texte (caractères)"
+
+msgid "Path of pdftotext (optional)"
+msgstr "Chemin de pdftotext (facultatif)"
+
+msgid "Leave empty to search the usual places. Without pdftotext (package poppler-utils), the built-in PHP parser is used; pdftotext keeps tables and columns better."
+msgstr "Laisser vide pour le chercher aux emplacements habituels. Sans pdftotext (paquet poppler-utils), l'analyseur PHP intégré est utilisé ; pdftotext conserve mieux les tableaux et les colonnes."
+
+msgid "Method in use"
+msgstr "Méthode utilisée"
+
+msgid "When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. A file attached again to the same ticket adds no second followup. Scanned PDFs without a text layer are skipped."
+msgstr "Lorsqu'un fichier PDF, Word (DOCX) ou OpenDocument (ODT) est joint à un ticket, un changement ou un problème (par courriel, formulaire ou API), son texte est ajouté sous forme de suivi : il peut ainsi être lu et recherché sans ouvrir le fichier. Un fichier joint à nouveau au même ticket n'ajoute pas de second suivi. Les PDF numérisés sans couche texte sont ignorés."
+
+msgid "Read these file types"
+msgstr "Lire ces types de fichiers"
+
+msgid "Word (DOCX)"
+msgstr "Word (DOCX)"
+
+msgid "OpenDocument text (ODT)"
+msgstr "Texte OpenDocument (ODT)"
+
+msgid "Word and OpenDocument files need the PHP extensions zip and dom, which are missing on this server."
+msgstr "Les fichiers Word et OpenDocument nécessitent les extensions PHP zip et dom, qui manquent sur ce serveur."
+
+msgid "Files attached before"
+msgstr "Fichiers joints auparavant"
+
+msgid "Files attached before the plugin was enabled are not read automatically. To add their text, choose the tickets, changes or problems in their list and use the action \"Copy the text of the attachments (PDF2Text)\", or run on the server:"
+msgstr "Les fichiers joints avant l'activation du plugin ne sont pas lus automatiquement. Pour ajouter leur texte, sélectionnez les tickets, changements ou problèmes dans leur liste et utilisez l'action « Copier le texte des pièces jointes (PDF2Text) », ou exécutez sur le serveur :"
+
+msgid "Files read before are skipped, so this can be repeated at any time."
+msgstr "Les fichiers déjà lus sont ignorés : l'opération peut donc être répétée à tout moment."
+
+#, php-format
+msgid "Text of the attachment \"%s\""
+msgstr "Texte de la pièce jointe « %s »"
+
+msgid "Copy the text of the attachments (PDF2Text)"
+msgstr "Copier le texte des pièces jointes (PDF2Text)"
+
+msgid "The text of PDF, Word and OpenDocument attachments that were not read yet is added as a followup."
+msgstr "Le texte des pièces jointes PDF, Word et OpenDocument pas encore lues est ajouté sous forme de suivi."
+
+msgid "Copy the text into a followup (PDF2Text)"
+msgstr "Copier le texte dans un suivi (PDF2Text)"
+
+msgid "Add again"
+msgstr "Ajouter à nouveau"
+
+msgid "The request failed. Please reload the page and try again."
+msgstr "La requête a échoué. Veuillez recharger la page et réessayer."
+
+msgid "PDF2Text is switched off for this type."
+msgstr "PDF2Text est désactivé pour ce type."
+
+msgid "You may not add a followup here."
+msgstr "Vous ne pouvez pas ajouter de suivi ici."
+
+msgid "The file was not found."
+msgstr "Le fichier est introuvable."
+
+msgid "The text of this file was added before. Add it again?"
+msgstr "Le texte de ce fichier a déjà été ajouté. L'ajouter à nouveau ?"
+
+msgid "The file contains no text (e.g. a scanned PDF)."
+msgstr "Le fichier ne contient pas de texte (p. ex. un PDF numérisé)."
+
+msgid "This file type is not read (see the settings of PDF2Text)."
+msgstr "Ce type de fichier n'est pas lu (voir les paramètres de PDF2Text)."
+
+msgid "The file could not be read (see files/_log/pdf2text.log)."
+msgstr "Le fichier n'a pas pu être lu (voir files/_log/pdf2text.log)."
+
+msgid "The text was added as a followup."
+msgstr "Le texte a été ajouté sous forme de suivi."
+
+#, php-format
+msgid "%d followup added"
+msgid_plural "%d followups added"
+msgstr[0] "%d suivi ajouté"
+msgstr[1] "%d suivis ajoutés"
+
+#, php-format
+msgid "%d file was copied before"
+msgid_plural "%d files were copied before"
+msgstr[0] "%d fichier déjà copié"
+msgstr[1] "%d fichiers déjà copiés"
+
+#, php-format
+msgid "%d file without text"
+msgid_plural "%d files without text"
+msgstr[0] "%d fichier sans texte"
+msgstr[1] "%d fichiers sans texte"
+
+#, php-format
+msgid "%d file could not be read (see files/_log/pdf2text.log)"
+msgid_plural "%d files could not be read (see files/_log/pdf2text.log)"
+msgstr[0] "%d fichier illisible (voir files/_log/pdf2text.log)"
+msgstr[1] "%d fichiers illisibles (voir files/_log/pdf2text.log)"
+
+msgid "no attachments with text"
+msgstr "aucune pièce jointe avec du texte"

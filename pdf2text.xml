@@ -56,9 +56,25 @@
       </version>
    </versions>
    <langs>
+      <lang>de_DE</lang>
       <lang>en_GB</lang>
       <lang>en_US</lang>
-      <lang>de_DE</lang>
+      <lang>es_419</lang>
+      <lang>es_AR</lang>
+      <lang>es_CL</lang>
+      <lang>es_CO</lang>
+      <lang>es_EC</lang>
+      <lang>es_ES</lang>
+      <lang>es_MX</lang>
+      <lang>es_VE</lang>
+      <lang>fr_BE</lang>
+      <lang>fr_CA</lang>
+      <lang>fr_FR</lang>
+      <lang>it_IT</lang>
+      <lang>pl_PL</lang>
+      <lang>pt_BR</lang>
+      <lang>pt_PT</lang>
+      <lang>ru_RU</lang>
    </langs>
    <license>GPL-3.0-or-later</license>
    <tags>

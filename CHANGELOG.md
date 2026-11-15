@@ -26,7 +26,8 @@
 - Configuration page: item types, file types, private followup, maximum length, path of pdftotext.
 - Compatible with GLPI 11 and 12: the CSRF token is only sent where GLPI 11 needs it (GLPI 12
   checks the origin of requests instead).
-- Translations: English (`en_GB`, `en_US`), German.
+- Translations: English, German, French, Portuguese (Brazil, Portugal), Spanish, Russian, Polish and
+  Italian, with a file for every regional variant GLPI offers of these languages.
 - Plugin key and folder `pdf2text`, like the plugin's name (development versions used `pdftext`;
   to move such an installation, rename `directory` in `glpi_plugins` and the configuration context
   `plugin:pdftext` in `glpi_configs` to `pdf2text`).

@@ -191,11 +191,17 @@ processing of files attached before, the console command, the massive action and
 the attachments (server side). `ConfigTest` checks the configuration page (saving, access,
 CSRF token field only on GLPI 11) and restores the settings afterwards.
 
-Languages: German (`de_DE`) and English (`en_GB`, `en_US`; same texts as the source). A file for
-every English variant GLPI offers is needed: for a language without a file, GLPI loads the plugin
+Languages: English (`en_GB`, `en_US`), German (`de_DE`), French (`fr_FR`, `fr_CA`, `fr_BE`),
+Portuguese (`pt_BR`, `pt_PT`, each translated on its own), Spanish (`es_ES`, `es_419`, `es_MX`,
+`es_AR`, `es_CO`, `es_CL`, `es_EC`, `es_VE`, one neutral text), Russian (`ru_RU`), Polish (`pl_PL`)
+and Italian (`it_IT`) – the eight languages most used with GLPI according to its telemetry. The
+words follow GLPI's own translations (e.g. French "suivi", Brazilian "acompanhamento"). A file for
+every regional variant GLPI offers is needed: for a language without a file, GLPI loads the plugin
 texts in the default language of the system (e.g. German), while its own texts follow the user's
-language. After a change of a `.po` file, compile it with `msgfmt -o locales/<lang>.mo
-locales/<lang>.po` and run `bin/console cache:clear` in GLPI.
+language. `tests/php/LocalesTest.php` checks that every file has all texts of `locales/pdf2text.pot`,
+that GLPI loads them and the plural forms (Russian and Polish have three). After a change of a `.po`
+file, compile it with `msgfmt --check -o locales/<lang>.mo locales/<lang>.po` and run
+`bin/console cache:clear` in GLPI.
 
 Code style and static analysis follow Teclib's plugin template. They need the plugin in the
 `plugins/pdf2text` directory of a GLPI development checkout (`composer install` in GLPI):
