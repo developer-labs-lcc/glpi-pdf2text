@@ -84,4 +84,10 @@
          <tag>Assistance</tag>
       </fr>
    </tags>
+   <screenshots>
+      <screenshot>https://raw.githubusercontent.com/developer-labs-lcc/glpi-pdf2text/main/pics/screenshots/1-pdf-text-followup.png</screenshot>
+      <screenshot>https://raw.githubusercontent.com/developer-labs-lcc/glpi-pdf2text/main/pics/screenshots/2-word-formatted.png</screenshot>
+      <screenshot>https://raw.githubusercontent.com/developer-labs-lcc/glpi-pdf2text/main/pics/screenshots/3-button-at-attachment.png</screenshot>
+      <screenshot>https://raw.githubusercontent.com/developer-labs-lcc/glpi-pdf2text/main/pics/screenshots/4-settings.png</screenshot>
+   </screenshots>
 </root>

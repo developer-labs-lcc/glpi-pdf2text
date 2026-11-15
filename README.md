@@ -7,6 +7,21 @@ opening the attachment.
 Typical use: a third party sends notifications as PDF attachments by mail. The mail collector
 creates the ticket, and the plugin adds the text of the PDF as a followup.
 
+## Screenshots
+
+The text of a PDF from the mail collector as a followup, and a Word document with its headings,
+lists and table:
+
+![Text of a PDF attachment as a followup](pics/screenshots/1-pdf-text-followup.png)
+
+![Text of a Word document, formatted](pics/screenshots/2-word-formatted.png)
+
+The button at each attachment and the settings:
+
+![Button "Copy the text into a followup" at an attachment](pics/screenshots/3-button-at-attachment.png)
+
+![Settings of PDF2Text](pics/screenshots/4-settings.png)
+
 ## How it works
 
 - Every time a PDF, DOCX or ODT file is linked to a ticket, change or problem, the plugin reads

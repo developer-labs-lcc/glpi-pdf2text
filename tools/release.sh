@@ -4,7 +4,7 @@
 # @link      https://developer-labs.com/en/glpi-development/
 # @copyright Developer Labs LLC
 # @license   GPL-3.0-or-later – see LICENSE
-# @version   1.0.2
+# @version   1.0.3
 # @created   2026-10-23
 # @changed   2026-11-15
 #
@@ -13,7 +13,7 @@
 #
 # The archive contains one directory "pdf2text" (= plugin key, required by the marketplace) with the
 # files needed at runtime, including vendor/ without dev packages. Tests, QA configuration, the
-# logo source and the VS Code workspace file are left out.
+# logo source, the screenshots and the VS Code workspace file are left out.
 # Needs: bash, tar, bzip2, composer and (for the ZIP) zip.
 #
 # Usage: tools/release.sh            (version is read from setup.php)
@@ -43,7 +43,7 @@ tar -cf - \
     --exclude='./vendor' --exclude='./var' --exclude='./dist' \
     --exclude='./tests' --exclude='./tools' \
     --exclude='./.php-cs-fixer.php' --exclude='./phpstan.neon' \
-    --exclude='./pics/logo.svg' \
+    --exclude='./pics/logo.svg' --exclude='./pics/screenshots' \
     --exclude='./*.code-workspace' \
     . | tar -xf - -C "$build/pdf2text"
 
