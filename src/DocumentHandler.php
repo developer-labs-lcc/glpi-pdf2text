@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.0
+ * @version   1.2.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -101,13 +101,68 @@ final class DocumentHandler
      */
     public static function processItem(CommonITILObject $parent, bool $dry_run = false): array
     {
-        /** @var DBmysql $DB */
-        global $DB;
-
         $counts = [self::ADDED => 0, self::EMPTY => 0, self::DONE => 0, self::PENDING => 0, self::FAILED => 0];
         if (!Settings::isEnabledFor($parent::class)) {
             return $counts;
         }
+
+        foreach (self::linkedDocumentIds($parent) as $documents_id) {
+            $document = new Document();
+            if (!$document->getFromDB($documents_id)) {
+                continue;
+            }
+            try {
+                $result = self::processDocument($parent, $document, $dry_run);
+            } catch (Throwable $e) {
+                Toolbox::logInFile(self::LOG, sprintf("Document %d: %s\n", $document->getID(), $e->getMessage()));
+                $result = self::FAILED;
+            }
+            if ($result !== self::IGNORED) {
+                $counts[$result]++;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Reads one file of an ITIL object on request (button at the attachment in the timeline, see
+     * AttachmentButton), also if its text was added before when $force is true.
+     *
+     * @return string one of the result constants; DONE: read before and $force is false
+     *
+     * @throws RuntimeException if the file is not attached to the object or cannot be read
+     */
+    public static function processOne(CommonITILObject $parent, Document $document, bool $force): string
+    {
+        // Only files of this object (or of its followups, tasks, solutions): a document of another
+        // ticket must not end up here, its text could be confidential
+        if (!self::isAttached($parent, $document)) {
+            throw new RuntimeException(sprintf('Document %d is not attached to %s #%d.', $document->getID(), $parent::class, $parent->getID()));
+        }
+
+        return self::processDocument($parent, $document, false, $force);
+    }
+
+    /**
+     * Whether the document is attached to the ITIL object or to one of its followups, tasks or
+     * solutions.
+     */
+    public static function isAttached(CommonITILObject $parent, Document $document): bool
+    {
+        return in_array($document->getID(), self::linkedDocumentIds($parent), true);
+    }
+
+    /**
+     * IDs of the documents attached to the ITIL object itself and to its followups, tasks and
+     * solutions, in the order they were attached.
+     *
+     * @return list<int>
+     */
+    private static function linkedDocumentIds(CommonITILObject $parent): array
+    {
+        /** @var DBmysql $DB */
+        global $DB;
 
         // The object itself and its sub-items that can carry files
         $where = [['itemtype' => $parent::class, 'items_id' => $parent->getID()]];
@@ -131,40 +186,31 @@ final class DocumentHandler
             }
         }
 
-        $links = $DB->request([
+        $ids = [];
+        foreach ($DB->request([
             'SELECT' => ['documents_id'],
             'FROM'   => Document_Item::getTable(),
             'WHERE'  => ['OR' => $where],
             'ORDER'  => 'id',
-        ]);
-        foreach ($links as $link) {
-            $document = new Document();
-            if (!is_array($link) || !$document->getFromDB(Cast::int($link['documents_id'] ?? 0))) {
-                continue;
-            }
-            try {
-                $result = self::processDocument($parent, $document, $dry_run);
-            } catch (Throwable $e) {
-                Toolbox::logInFile(self::LOG, sprintf("Document %d: %s\n", $document->getID(), $e->getMessage()));
-                $result = self::FAILED;
-            }
-            if ($result !== self::IGNORED) {
-                $counts[$result]++;
+        ]) as $link) {
+            if (is_array($link)) {
+                $ids[] = Cast::int($link['documents_id'] ?? 0);
             }
         }
 
-        return $counts;
+        // A document linked twice (e.g. to a followup and to the ticket) is read once
+        return array_values(array_unique($ids));
     }
 
     /**
      * Reads one file and adds its text as a followup to the ITIL object, unless it was read
-     * for that object before.
+     * for that object before (with $force: also then, e.g. on request by the button).
      *
      * @return string one of the result constants (ADDED, EMPTY, DONE, PENDING, IGNORED)
      *
      * @throws RuntimeException if the file cannot be read
      */
-    private static function processDocument(CommonITILObject $parent, Document $document, bool $dry_run = false): string
+    private static function processDocument(CommonITILObject $parent, Document $document, bool $dry_run = false, bool $force = false): string
     {
         $filename = Cast::string($document->fields['filename']);
         $format   = Settings::formatOf($filename, Cast::string($document->fields['mime']));
@@ -180,7 +226,7 @@ final class DocumentHandler
         }
 
         $key = $sha1sum . ':' . $parent::class . ':' . $parent->getID();
-        if (isset(self::$done[$key]) || ProcessedFiles::isDone($parent, $sha1sum, $filename)) {
+        if (!$force && (isset(self::$done[$key]) || ProcessedFiles::isDone($parent, $sha1sum, $filename))) {
             return self::DONE;
         }
         if ($dry_run) {

@@ -15,6 +15,7 @@
 <li>Works for new tickets from the mail collector, reply mails, and files attached to followups, tasks and solutions.</li>
 <li>A file attached again (e.g. quoted by a reply mail) adds no second followup.</li>
 <li>Files attached before: massive action in the lists of tickets, changes and problems, and a console command.</li>
+<li>Button at each attachment in the timeline to copy its text on request.</li>
 <li>Uses pdftotext (poppler-utils) when installed, which keeps tables and columns; otherwise a bundled PHP parser.</li>
 <li>No notification for the added followup, solved tickets are not reopened.</li>
 <li>Configurable: item types, file types, private followup, maximum length, path of pdftotext.</li>
@@ -25,6 +26,7 @@
 <li>Funktioniert bei neuen Tickets aus dem Mail-Collector, bei Antwort-Mails und bei Dateien an Folgebeiträgen, Aufgaben und Lösungen.</li>
 <li>Eine erneut angehängte Datei (z. B. in einer Antwort-Mail zitiert) ergibt keinen zweiten Folgebeitrag.</li>
 <li>Früher angehängte Dateien: Massenaktion in den Listen der Tickets, Changes und Problems sowie ein Konsolenbefehl.</li>
+<li>Schaltfläche an jedem Anhang in der Zeitleiste, um seinen Text bei Bedarf zu übernehmen.</li>
 <li>Nutzt pdftotext (poppler-utils), wenn installiert – Tabellen und Spalten bleiben erhalten; sonst einen mitgelieferten PHP-Parser.</li>
 <li>Keine Benachrichtigung für den Folgebeitrag, gelöste Tickets werden nicht wieder geöffnet.</li>
 <li>Einstellbar: Objekttypen, Dateitypen, privater Folgebeitrag, maximale Länge, Pfad zu pdftotext.</li>
@@ -35,6 +37,7 @@
 <li>Fonctionne pour les nouveaux tickets du collecteur, les réponses par courriel et les fichiers joints aux suivis, tâches et solutions.</li>
 <li>Un fichier joint à nouveau (p. ex. cité dans une réponse par courriel) n'ajoute pas de second suivi.</li>
 <li>Fichiers joints auparavant : action de masse dans les listes des tickets, changements et problèmes, et une commande console.</li>
+<li>Bouton sur chaque pièce jointe de la chronologie pour copier son texte à la demande.</li>
 <li>Utilise pdftotext (poppler-utils) s'il est installé, ce qui conserve tableaux et colonnes ; sinon un analyseur PHP fourni.</li>
 <li>Aucune notification pour le suivi ajouté, les tickets résolus ne sont pas rouverts.</li>
 <li>Paramétrable : types d'objets, types de fichiers, suivi privé, longueur maximale, chemin de pdftotext.</li>

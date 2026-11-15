@@ -81,3 +81,36 @@ msgstr "Der Text noch nicht gelesener PDF-, Word- und OpenDocument-Anhänge wird
 #, php-format
 msgid "PDF2Text: %1$d followup(s) added, %2$d file(s) without text, %3$d file(s) not readable (see files/_log/pdf2text.log)."
 msgstr "PDF2Text: %1$d Folgebeitrag/-beiträge hinzugefügt, %2$d Datei(en) ohne Text, %3$d Datei(en) nicht lesbar (siehe files/_log/pdf2text.log)."
+
+msgid "Copy the text into a followup (PDF2Text)"
+msgstr "Text als Folgebeitrag übernehmen (PDF2Text)"
+
+msgid "Add again"
+msgstr "Erneut hinzufügen"
+
+msgid "The request failed. Please reload the page and try again."
+msgstr "Die Anfrage ist fehlgeschlagen. Bitte die Seite neu laden und es noch einmal versuchen."
+
+msgid "PDF2Text is switched off for this type."
+msgstr "PDF2Text ist für diesen Typ ausgeschaltet."
+
+msgid "You may not add a followup here."
+msgstr "Hier dürfen Sie keinen Folgebeitrag hinzufügen."
+
+msgid "The file was not found."
+msgstr "Die Datei wurde nicht gefunden."
+
+msgid "The text of this file was added before. Add it again?"
+msgstr "Der Text dieser Datei wurde bereits übernommen. Erneut hinzufügen?"
+
+msgid "The file contains no text (e.g. a scanned PDF)."
+msgstr "Die Datei enthält keinen Text (z. B. ein gescanntes PDF)."
+
+msgid "This file type is not read (see the settings of PDF2Text)."
+msgstr "Dieser Dateityp wird nicht gelesen (siehe Einstellungen von PDF2Text)."
+
+msgid "The file could not be read (see files/_log/pdf2text.log)."
+msgstr "Die Datei konnte nicht gelesen werden (siehe files/_log/pdf2text.log)."
+
+msgid "The text was added as a followup."
+msgstr "Der Text wurde als Folgebeitrag hinzugefügt."

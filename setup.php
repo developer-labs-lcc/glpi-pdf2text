@@ -6,14 +6,18 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.0
+ * @version   1.2.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
 
 use Glpi\Plugin\Hooks;
+use GlpiPlugin\Pdf2text\AttachmentButton;
+use GlpiPlugin\Pdf2text\Cast;
 use GlpiPlugin\Pdf2text\DocumentHandler;
 use GlpiPlugin\Pdf2text\ProcessedFiles;
+
+use function Safe\filemtime;
 
 /** @phpstan-ignore theCodingMachineSafe.function (safe to assume this isn't already defined) */
 define('PLUGIN_PDF2TEXT_VERSION', '1.0.0');
@@ -56,6 +60,22 @@ function plugin_init_pdf2text(): void
     // Massive action "Copy the text of the attachments" in the lists of tickets, changes and
     // problems (actions: plugin_pdf2text_MassiveActions() in hook.php, see MassiveActions)
     $PLUGIN_HOOKS[Hooks::USE_MASSIVE_ACTION]['pdf2text'] = true;
+
+    // Button "Copy the text into a followup" at the attachments in the timeline (see
+    // AttachmentButton): only on the form pages of tickets, changes and problems, for users who
+    // may add a followup there, and not for AJAX requests (they print no page header).
+    $request_uri = is_string($_SERVER['REQUEST_URI'] ?? null) ? $_SERVER['REQUEST_URI'] : '';
+    if (Session::getLoginUserID() !== false && ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'XMLHttpRequest') {
+        /** @var array<string, mixed> $CFG_GLPI */
+        global $CFG_GLPI;
+        $tag = AttachmentButton::headerTag($request_uri, Cast::string($CFG_GLPI['root_doc'] ?? ''));
+        if ($tag !== null) {
+            $PLUGIN_HOOKS[Hooks::ADD_HEADER_TAG]['pdf2text'] = [$tag];
+            // The parameter changes with the file, so browsers do not keep an old version
+            $script = __DIR__ . '/public/js/attachments.js';
+            $PLUGIN_HOOKS[Hooks::ADD_JAVASCRIPT]['pdf2text'] = ['js/attachments.js?h=' . substr(md5(PLUGIN_PDF2TEXT_VERSION . (is_file($script) ? filemtime($script) : '')), 0, 8)];
+        }
+    }
 
     // Setup > Plugins > PDF2Text
     if (Session::haveRight(Config::$rightname, UPDATE)) {

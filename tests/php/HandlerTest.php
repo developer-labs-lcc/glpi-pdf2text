@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.0
+ * @version   1.2.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -15,7 +15,7 @@
 // PDF, non-PDF attachment, PDF in a reply followup of a solved ticket, PDF in a task, change,
 // disabled item type, private flag and search by followup content; Word and OpenDocument files;
 // no second followup for a file attached again; files attached before (processItem(), console
-// command, massive action).
+// command, massive action); the button at the attachments in the timeline.
 //
 // The plugin settings are changed for the test and restored.
 
@@ -24,12 +24,15 @@ require __DIR__ . '/bootstrap.php';
 /** @var DBmysql $DB */
 global $DB;
 
+use GlpiPlugin\Pdf2text\AttachmentButton;
 use GlpiPlugin\Pdf2text\Console\ProcessCommand;
+use GlpiPlugin\Pdf2text\Controller\AttachmentController;
 use GlpiPlugin\Pdf2text\DocumentHandler;
 use GlpiPlugin\Pdf2text\MassiveActions;
 use GlpiPlugin\Pdf2text\ProcessedFiles;
 use GlpiPlugin\Pdf2text\Settings;
 use Symfony\Component\Console\Tester\CommandTester;
+use Symfony\Component\HttpFoundation\Request;
 
 $rid = run_id();
 $original_settings = [];
@@ -254,6 +257,53 @@ $ma = new MassiveAction([
 MassiveActions::processMassiveActionsForOneItemtype($ma, new Ticket(), [$ma_ticket->getID()]);
 check('processor and action recognised', $ma->getAction() === MassiveActions::ACTION, $ma->getAction());
 check('massive action adds the text', count(followups_with($ma_ticket, 'OKAPI-0815')) === 1, json_encode($ma->results) ?: '');
+
+section('button at the attachment');
+$button_ticket = $create(Ticket::class, 'Button ticket', []);
+$other_ticket  = $create(Ticket::class, 'Other ticket', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $button_ticket->getID(), 'content' => 'Mail', '_filename' => [upload('change.pdf')]]);
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $other_ticket->getID(), 'content' => 'Mail', '_filename' => [upload('change.odt')]]);
+Settings::set(['on_ticket' => 1]);
+$document_of = static function (CommonITILObject $item) use ($DB): int {
+    $followups = array_column(iterator_to_array($DB->request(['SELECT' => ['id'], 'FROM' => ITILFollowup::getTable(), 'WHERE' => ['itemtype' => $item::class, 'items_id' => $item->getID()]]), false), 'id');
+    $row = $DB->request(['SELECT' => ['documents_id'], 'FROM' => Document_Item::getTable(), 'WHERE' => ['itemtype' => ITILFollowup::class, 'items_id' => $followups]])->current();
+    return (int) ($row['documents_id'] ?? 0);
+};
+$pdf_id   = $document_of($button_ticket);
+$other_id = $document_of($other_ticket);
+check('page of the ticket recognised', AttachmentButton::pageItem('/glpi/front/ticket.form.php?id=' . $button_ticket->getID())?->getID() === $button_ticket->getID());
+check('other pages get no button', AttachmentButton::pageItem('/glpi/front/ticket.php') === null && AttachmentButton::pageItem('/glpi/front/computer.form.php?id=1') === null);
+$tag = AttachmentButton::headerTag('/glpi/front/ticket.form.php?id=' . $button_ticket->getID(), '/glpi');
+$tag_data = json_decode($tag['properties']['content'] ?? '{}', true);
+check('meta tag with address, ticket and file types', ($tag_data['url'] ?? '') === '/glpi/plugins/pdf2text/attachment'
+    && ($tag_data['items_id'] ?? 0) === $button_ticket->getID() && in_array('pdf', $tag_data['extensions'] ?? [], true), json_encode($tag_data) ?: '');
+
+$click = static function (array $data): array {
+    DocumentHandler::reset();
+    $response = (new AttachmentController())->attachment(Request::create('/plugins/pdf2text/attachment', 'POST', $data));
+    return ['code' => $response->getStatusCode()] + (json_decode((string) $response->getContent(), true) ?: []);
+};
+$data = ['itemtype' => Ticket::class, 'items_id' => $button_ticket->getID(), 'documents_id' => $pdf_id];
+$answer = $click($data);
+check('click: text added', ($answer['status'] ?? '') === 'added' && count(pdf_followups($button_ticket)) === 1, json_encode($answer) ?: '');
+$answer = $click($data);
+check('second click: asks before adding again', ($answer['status'] ?? '') === 'done' && count(pdf_followups($button_ticket)) === 1, json_encode($answer) ?: '');
+$answer = $click($data + ['force' => '1']);
+check('confirmed: text added again', ($answer['status'] ?? '') === 'added' && count(pdf_followups($button_ticket)) === 2, json_encode($answer) ?: '');
+$answer = $click(['itemtype' => Ticket::class, 'items_id' => $button_ticket->getID(), 'documents_id' => $other_id]);
+check('file of another ticket refused ("not found")', ($answer['code'] ?? 0) === 404 && count(followups_with($button_ticket, 'OKAPI-0815')) === 0, json_encode($answer) ?: '');
+$answer = $click(['itemtype' => Computer::class, 'items_id' => 1, 'documents_id' => $pdf_id]);
+check('other item type refused', ($answer['code'] ?? 0) === 403);
+$followup_rights = $_SESSION['glpiactiveprofile']['followup'];
+$_SESSION['glpiactiveprofile']['followup'] = 0;
+$answer = $click($data + ['force' => '1']);
+check('without the right to add followups: refused', ($answer['code'] ?? 0) === 403 && count(pdf_followups($button_ticket)) === 2, json_encode($answer) ?: '');
+check('without the right: no button on the page', AttachmentButton::headerTag('/glpi/front/ticket.form.php?id=' . $button_ticket->getID(), '/glpi') === null);
+$_SESSION['glpiactiveprofile']['followup'] = $followup_rights;
+// Messages for after the reload, noted by the clicks above
+$_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
 
 section('purge');
 $purge_id = $before->getID();

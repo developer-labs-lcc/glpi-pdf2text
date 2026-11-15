@@ -81,3 +81,36 @@ msgstr "The text of PDF, Word and OpenDocument attachments that were not read ye
 #, php-format
 msgid "PDF2Text: %1$d followup(s) added, %2$d file(s) without text, %3$d file(s) not readable (see files/_log/pdf2text.log)."
 msgstr "PDF2Text: %1$d followup(s) added, %2$d file(s) without text, %3$d file(s) not readable (see files/_log/pdf2text.log)."
+
+msgid "Copy the text into a followup (PDF2Text)"
+msgstr "Copy the text into a followup (PDF2Text)"
+
+msgid "Add again"
+msgstr "Add again"
+
+msgid "The request failed. Please reload the page and try again."
+msgstr "The request failed. Please reload the page and try again."
+
+msgid "PDF2Text is switched off for this type."
+msgstr "PDF2Text is switched off for this type."
+
+msgid "You may not add a followup here."
+msgstr "You may not add a followup here."
+
+msgid "The file was not found."
+msgstr "The file was not found."
+
+msgid "The text of this file was added before. Add it again?"
+msgstr "The text of this file was added before. Add it again?"
+
+msgid "The file contains no text (e.g. a scanned PDF)."
+msgstr "The file contains no text (e.g. a scanned PDF)."
+
+msgid "This file type is not read (see the settings of PDF2Text)."
+msgstr "This file type is not read (see the settings of PDF2Text)."
+
+msgid "The file could not be read (see files/_log/pdf2text.log)."
+msgstr "The file could not be read (see files/_log/pdf2text.log)."
+
+msgid "The text was added as a followup."
+msgstr "The text was added as a followup."

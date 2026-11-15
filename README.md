@@ -32,6 +32,24 @@ creates the ticket, and the plugin adds the text of the PDF as a followup.
 - Problems (unreadable or broken files) are logged to `files/_log/pdf2text.log`; the ticket is
   created in any case.
 
+## Button at the attachment
+
+In the timeline of a ticket, change or problem, GLPI shows buttons when the mouse is over an
+attachment (edit, delete, import exclusion list). For PDF, Word and OpenDocument files of the
+types switched on, the plugin adds a button **Copy the text into a followup** (icon of a text
+file) in front of them:
+
+- A click reads the file and adds its text as a followup; the page is reloaded to show it.
+- If the text of this file was added before, the button asks first and adds it again on
+  **Add again** (e.g. when the earlier followup was shortened or edited).
+- Shown to the users who may add a followup to this ticket, change or problem (the same right as
+  GLPI's **Answer**). Only files of this object (or of its followups, tasks and solutions) can be
+  read this way.
+- Files without text (e.g. scanned PDFs) and files that cannot be read give a message instead.
+
+GLPI has no hook for these buttons; the plugin adds the button with JavaScript
+(`public/js/attachments.js`) on the form pages of tickets, changes and problems.
+
 Searching: in the ticket list, use the search criterion **Followups > Description** (it contains
 the text of the files) or the global search.
 
@@ -131,7 +149,8 @@ php tests/php/ExtractorTest.php   # text extraction only, also runs without GLPI
 `ExtractorTest` also reads the Word and OpenDocument fixtures (`tests/fixtures/change.docx`,
 `change.odt`). `HandlerTest` boots GLPI and creates its own tickets, changes and documents in the
 database of the instance, and purges them at the end; it also covers files attached again, the
-processing of files attached before, the console command and the massive action. `ConfigTest` checks the configuration page (saving, access,
+processing of files attached before, the console command, the massive action and the button at
+the attachments (server side). `ConfigTest` checks the configuration page (saving, access,
 CSRF token field only on GLPI 11) and restores the settings afterwards.
 
 Languages: German (`de_DE`) and English (`en_GB`, `en_US`; same texts as the source). A file for
