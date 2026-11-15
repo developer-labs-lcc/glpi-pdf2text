@@ -193,12 +193,18 @@ Code style and static analysis follow Teclib's plugin template. They need the pl
 ### Release
 
 1. Raise the version in `setup.php` (`PLUGIN_PDF2TEXT_VERSION`), add it to `pdf2text.xml`
-   (`<version>` with `<download_url>`) and describe it in `CHANGELOG.md`.
+   (a new `<version>` with `<num>`, one `<compatibility>` per GLPI major version, e.g.
+   `~11.0.0` and `~12.0.0`, and `<download_url>`) and describe it in `CHANGELOG.md`.
 2. `tools/release.sh` builds `dist/glpi-pdf2text-<version>.tar.bz2` and, with the same content
    but without the parent directory, `dist/pdf2text.zip`.
 3. Create a GitHub release with the tag `<version>` and attach both archives.
 
-The plugin catalog reads `pdf2text.xml` from the `main` branch.
+The plugin catalog ([plugins.glpi-project.org](https://plugins.glpi-project.org/), shown in
+GLPI's **Marketplace**) reads `pdf2text.xml` from the `main` branch
+(`https://raw.githubusercontent.com/developer-labs-lcc/glpi-pdf2text/main/pdf2text.xml`) and
+checks it regularly: new versions appear there without a new submission. The file follows the
+format of the catalog: logo 40 × 40 pixels, short descriptions as plain text, long descriptions
+in Markdown.
 
 ### File headers
 
@@ -207,7 +213,7 @@ copyright, license, the version of the file and its dates:
 
 ```php
 /**
- * PDF2Text – copies the text of PDF attachments into GLPI tickets, changes and problems.
+ * PDF2Text – copies the text of PDF, Word and OpenDocument attachments into GLPI tickets, changes and problems.
  *
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC

@@ -10,52 +10,48 @@
          <fr>Copie le texte des pièces jointes PDF, Word et OpenDocument dans les tickets, changements et problèmes, pour le lire et le rechercher.</fr>
       </short>
       <long>
-         <en><![CDATA[<p>When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, change or problem – by the mail collector, the form or the API – PDF2Text adds its text as a followup (private by default). The text can be read in the timeline without opening the file and is found by the search (Followups &gt; Description).</p>
-<ul>
-<li>Works for new tickets from the mail collector, reply mails, and files attached to followups, tasks and solutions.</li>
-<li>A file attached again (e.g. quoted by a reply mail) adds no second followup.</li>
-<li>Files attached before: massive action in the lists of tickets, changes and problems, and a console command.</li>
-<li>Button at each attachment in the timeline to copy its text on request.</li>
-<li>Uses pdftotext (poppler-utils) when installed, which keeps tables and columns; otherwise a bundled PHP parser.</li>
-<li>No notification for the added followup, solved tickets are not reopened.</li>
-<li>Configurable: item types, file types, private followup, maximum length, path of pdftotext.</li>
-<li>Scanned PDFs without a text layer are skipped (no OCR).</li>
-</ul>]]></en>
-         <de><![CDATA[<p>Wird an ein Ticket, einen Change oder ein Problem ein PDF, ein Word-Dokument (DOCX) oder ein OpenDocument-Text (ODT) angehängt – per Mail-Collector, Formular oder API –, fügt PDF2Text dessen Text als Folgebeitrag hinzu (standardmäßig privat). Der Text ist in der Zeitleiste lesbar, ohne die Datei zu öffnen, und wird von der Suche gefunden (Folgebeiträge &gt; Beschreibung).</p>
-<ul>
-<li>Funktioniert bei neuen Tickets aus dem Mail-Collector, bei Antwort-Mails und bei Dateien an Folgebeiträgen, Aufgaben und Lösungen.</li>
-<li>Eine erneut angehängte Datei (z. B. in einer Antwort-Mail zitiert) ergibt keinen zweiten Folgebeitrag.</li>
-<li>Früher angehängte Dateien: Massenaktion in den Listen der Tickets, Changes und Problems sowie ein Konsolenbefehl.</li>
-<li>Schaltfläche an jedem Anhang in der Zeitleiste, um seinen Text bei Bedarf zu übernehmen.</li>
-<li>Nutzt pdftotext (poppler-utils), wenn installiert – Tabellen und Spalten bleiben erhalten; sonst einen mitgelieferten PHP-Parser.</li>
-<li>Keine Benachrichtigung für den Folgebeitrag, gelöste Tickets werden nicht wieder geöffnet.</li>
-<li>Einstellbar: Objekttypen, Dateitypen, privater Folgebeitrag, maximale Länge, Pfad zu pdftotext.</li>
-<li>Gescannte PDFs ohne Textebene werden übersprungen (keine Texterkennung).</li>
-</ul>]]></de>
-         <fr><![CDATA[<p>Lorsqu'un fichier PDF, Word (DOCX) ou OpenDocument (ODT) est joint à un ticket, un changement ou un problème – par le collecteur de courriels, le formulaire ou l'API –, PDF2Text ajoute son texte sous forme de suivi (privé par défaut). Le texte est lisible dans la chronologie sans ouvrir le fichier et il est trouvé par la recherche (Suivis &gt; Description).</p>
-<ul>
-<li>Fonctionne pour les nouveaux tickets du collecteur, les réponses par courriel et les fichiers joints aux suivis, tâches et solutions.</li>
-<li>Un fichier joint à nouveau (p. ex. cité dans une réponse par courriel) n'ajoute pas de second suivi.</li>
-<li>Fichiers joints auparavant : action de masse dans les listes des tickets, changements et problèmes, et une commande console.</li>
-<li>Bouton sur chaque pièce jointe de la chronologie pour copier son texte à la demande.</li>
-<li>Utilise pdftotext (poppler-utils) s'il est installé, ce qui conserve tableaux et colonnes ; sinon un analyseur PHP fourni.</li>
-<li>Aucune notification pour le suivi ajouté, les tickets résolus ne sont pas rouverts.</li>
-<li>Paramétrable : types d'objets, types de fichiers, suivi privé, longueur maximale, chemin de pdftotext.</li>
-<li>Les PDF numérisés sans couche texte sont ignorés (pas d'OCR).</li>
-</ul>]]></fr>
+         <en><![CDATA[When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, change or problem – by the mail collector, the form or the API – **PDF2Text** adds its text as a followup (private by default). The text can be read in the timeline without opening the file and is found by the search (*Followups > Description*).
+
+* Works for new tickets from the mail collector, reply mails, and files attached to followups, tasks, solutions and approvals.
+* Word and OpenDocument texts keep their headings, lists and tables; PDFs are read with pdftotext (poppler-utils) when installed, which keeps tables and columns, otherwise with a bundled PHP parser.
+* A file attached again (e.g. quoted by a reply mail) adds no second followup.
+* Files attached earlier: a button at each attachment in the timeline, a massive action in the lists and a console command.
+* No notification for the added followup, solved tickets are not reopened; the text of files on private followups or tasks stays private.
+* Configurable: item types, file types, private followup, maximum length, path of pdftotext.
+* Scanned PDFs without a text layer are skipped (no OCR).]]></en>
+         <de><![CDATA[Wird an ein Ticket, einen Change oder ein Problem ein PDF, ein Word-Dokument (DOCX) oder ein OpenDocument-Text (ODT) angehängt – per Mail-Collector, Formular oder API –, fügt **PDF2Text** dessen Text als Folgebeitrag hinzu (standardmäßig privat). Der Text ist in der Zeitleiste lesbar, ohne die Datei zu öffnen, und wird von der Suche gefunden (*Folgebeiträge > Beschreibung*).
+
+* Funktioniert bei neuen Tickets aus dem Mail-Collector, bei Antwort-Mails und bei Dateien an Folgebeiträgen, Aufgaben, Lösungen und Genehmigungen.
+* Word- und OpenDocument-Texte behalten Überschriften, Listen und Tabellen; PDFs werden mit pdftotext (poppler-utils) gelesen, wenn installiert – Tabellen und Spalten bleiben erhalten –, sonst mit einem mitgelieferten PHP-Parser.
+* Eine erneut angehängte Datei (z. B. in einer Antwort-Mail zitiert) ergibt keinen zweiten Folgebeitrag.
+* Früher angehängte Dateien: Schaltfläche an jedem Anhang in der Zeitleiste, Massenaktion in den Listen und ein Konsolenbefehl.
+* Keine Benachrichtigung für den Folgebeitrag, gelöste Tickets werden nicht wieder geöffnet; der Text von Dateien an privaten Folgebeiträgen oder Aufgaben bleibt privat.
+* Einstellbar: Objekttypen, Dateitypen, privater Folgebeitrag, maximale Länge, Pfad zu pdftotext.
+* Gescannte PDFs ohne Textebene werden übersprungen (keine Texterkennung).]]></de>
+         <fr><![CDATA[Lorsqu'un fichier PDF, Word (DOCX) ou OpenDocument (ODT) est joint à un ticket, un changement ou un problème – par le collecteur de courriels, le formulaire ou l'API –, **PDF2Text** ajoute son texte sous forme de suivi (privé par défaut). Le texte est lisible dans la chronologie sans ouvrir le fichier et il est trouvé par la recherche (*Suivis > Description*).
+
+* Fonctionne pour les nouveaux tickets du collecteur, les réponses par courriel et les fichiers joints aux suivis, tâches, solutions et validations.
+* Les textes Word et OpenDocument gardent leurs titres, listes et tableaux ; les PDF sont lus avec pdftotext (poppler-utils) s'il est installé, ce qui conserve tableaux et colonnes, sinon avec un analyseur PHP fourni.
+* Un fichier joint à nouveau (p. ex. cité dans une réponse par courriel) n'ajoute pas de second suivi.
+* Fichiers joints auparavant : un bouton sur chaque pièce jointe de la chronologie, une action de masse dans les listes et une commande console.
+* Aucune notification pour le suivi ajouté, les tickets résolus ne sont pas rouverts ; le texte des fichiers de suivis ou tâches privés reste privé.
+* Paramétrable : types d'objets, types de fichiers, suivi privé, longueur maximale, chemin de pdftotext.
+* Les PDF numérisés sans couche texte sont ignorés (pas d'OCR).]]></fr>
       </long>
    </description>
    <homepage>https://github.com/developer-labs-lcc/glpi-pdf2text</homepage>
    <download>https://github.com/developer-labs-lcc/glpi-pdf2text/releases</download>
    <issues>https://github.com/developer-labs-lcc/glpi-pdf2text/issues</issues>
    <readme>https://github.com/developer-labs-lcc/glpi-pdf2text/blob/main/README.md</readme>
+   <changelog>https://github.com/developer-labs-lcc/glpi-pdf2text/blob/main/CHANGELOG.md</changelog>
    <authors>
       <author>AI &amp; Developer Labs LLC</author>
    </authors>
    <versions>
       <version>
          <num>1.0.0</num>
-         <compatibility>~11.0.0 || ~12.0.0</compatibility>
+         <compatibility>~11.0.0</compatibility>
+         <compatibility>~12.0.0</compatibility>
          <download_url>https://github.com/developer-labs-lcc/glpi-pdf2text/releases/download/1.0.0/glpi-pdf2text-1.0.0.tar.bz2</download_url>
       </version>
    </versions>
