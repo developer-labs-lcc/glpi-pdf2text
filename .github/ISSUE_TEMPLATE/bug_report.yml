@@ -1,0 +1,136 @@
+# PDF2Text – copies the text of PDF, Word and OpenDocument attachments into GLPI tickets, changes and problems.
+#
+# @link      https://developer-labs.com/en/glpi-development/
+# @copyright Developer Labs LLC
+# @license   GPL-3.0-or-later – see LICENSE
+# @version   1.0.0
+# @created   2026-11-15
+#
+# Issue form "Bug report" of GitHub (shown under "New issue"). Fields with "required: true" must
+# be filled in before the issue can be created.
+name: Bug report
+description: Something does not work as described in the README.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem! English or German are both fine.
+
+        **Please do not attach confidential documents.** If the problem only shows with a
+        certain file, create a small test file with the same structure, or describe it.
+
+        Security problems: please do **not** open an issue, use
+        [Report a vulnerability](https://github.com/developer-labs-lcc/glpi-pdf2text/security/advisories/new) instead.
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: PDF2Text version
+      description: Setup > Plugins, column "Version".
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: glpi-version
+    attributes:
+      label: GLPI version
+      description: Shown at the bottom of every GLPI page, or in Setup > General > System.
+      placeholder: "11.0.9"
+    validations:
+      required: true
+
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      description: Setup > General > System, section "Server" (or `php -v` on the server).
+      placeholder: "8.3.14"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: method
+    attributes:
+      label: Method in use for PDFs
+      description: Setup > Plugins > PDF2Text, field "Method in use".
+      options:
+        - pdftotext
+        - smalot/pdfparser (PHP)
+        - I don't know
+    validations:
+      required: true
+
+  - type: dropdown
+    id: file-type
+    attributes:
+      label: File type concerned
+      multiple: true
+      options:
+        - PDF
+        - Word (DOCX)
+        - OpenDocument text (ODT)
+        - Not related to a file type (settings, button, massive action, console command, …)
+
+  - type: dropdown
+    id: way
+    attributes:
+      label: How was the file added or read?
+      multiple: true
+      options:
+        - Mail collector (new ticket or reply mail)
+        - Attached in the web form
+        - API
+        - Button "Copy the text into a followup" at the attachment
+        - Massive action in the list
+        - Console command plugins:pdf2text:process
+        - Other / not relevant
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: |
+        A step-by-step guide, so that we can make the problem happen ourselves: what you clicked
+        or ran, in which order, with which settings and which kind of file.
+      placeholder: |
+        1. Setup > Plugins > PDF2Text: "Private followup" off, all file types on
+        2. Send a mail with a two-page PDF (text, no scan) to the mail collector
+        3. Open the new ticket
+        4. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: A followup with the text of the PDF is added.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happens instead? Error messages, screenshots (without confidential data) help.
+      placeholder: No followup is added, the ticket shows …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log entries
+      description: |
+        Matching lines of `files/_log/pdf2text.log` and `files/_log/php-errors.log` in the GLPI
+        directory, from the time of the problem. Please remove confidential data.
+      render: text
+
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
+      description: Other plugins that may matter, operating system of the server, browser, …

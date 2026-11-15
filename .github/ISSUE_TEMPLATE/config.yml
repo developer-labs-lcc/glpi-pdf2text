@@ -1,0 +1,15 @@
+# PDF2Text – copies the text of PDF, Word and OpenDocument attachments into GLPI tickets, changes and problems.
+#
+# @link      https://developer-labs.com/en/glpi-development/
+# @copyright Developer Labs LLC
+# @license   GPL-3.0-or-later – see LICENSE
+# @version   1.0.0
+# @created   2026-11-15
+#
+# Choice under "New issue": the bug report form (bug_report.yml), no empty issues, and a link for
+# security problems (reported privately, not as a public issue).
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/developer-labs-lcc/glpi-pdf2text/security/advisories/new
+    about: Please report security problems privately here, not as a public issue.

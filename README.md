@@ -150,6 +150,15 @@ text of files attached before.
 - Files that need a password to open, the old Word format (`.doc`), spreadsheets,
   presentations and images are not read.
 
+## Reporting bugs
+
+Please use the form under
+[Issues > New issue](https://github.com/developer-labs-lcc/glpi-pdf2text/issues/new/choose). It
+asks for the versions of PDF2Text, GLPI and PHP and for a step-by-step guide to reproduce the
+problem. Please do not attach confidential documents. Security problems are reported privately
+under [Report a vulnerability](https://github.com/developer-labs-lcc/glpi-pdf2text/security/advisories/new),
+not as a public issue.
+
 ## Development
 
 Tests (`composer install` with dev packages first):
