@@ -19,9 +19,12 @@ creates the ticket, and the plugin adds the text of the PDF as a followup.
   tables and columns. Otherwise the bundled PHP parser
   ([smalot/pdfparser](https://github.com/smalot/pdfparser)) is used, so the plugin also works on
   hosting without shell access.
-- Word and OpenDocument files are read by the plugin itself (no extra program): paragraphs
-  become lines, table rows become lines with the cells separated by tabs. Headers, footers,
-  footnotes, comments and deleted text of tracked changes are left out.
+- Word and OpenDocument files are read by the plugin itself (no extra program) and their text is
+  added **formatted**: headings, paragraphs, bulleted and numbered lists (also nested) and tables,
+  with lines that wrap like any followup. Which paragraphs are headings and whether a list is
+  numbered is taken from the styles of the document. Headers, footers, footnotes, comments,
+  generated tables of contents and deleted text of tracked changes are left out. PDFs are added
+  as a text block in a fixed-width font, so the columns of `pdftotext` stay aligned.
 - **No duplicates:** each file is read only once per ticket, change or problem. The same file
   attached again – e.g. a reply mail that quotes the PDF of the first mail – adds no second
   followup. Files are recognised by their checksum, not by their name: a new file with an old
@@ -85,8 +88,8 @@ file name in their heading and the text block), so these files are not read a se
 ## Requirements
 
 - GLPI 11.0 or later (tested with 11.0.9 and 12.0.0)
-- PHP 8.2 or later; for Word and OpenDocument the PHP extensions `zip` and `xmlreader` (both
-  usually installed; the configuration page warns if they are missing)
+- PHP 8.2 or later; for Word and OpenDocument the PHP extensions `zip` and `dom` (both usually
+  installed; the configuration page warns if they are missing)
 - Recommended: `pdftotext` (`apt install poppler-utils` / `dnf install poppler-utils`)
 
 ## Installation
@@ -135,7 +138,8 @@ text of files attached before.
 
 - The PHP parser only reads PDFs up to 20 MB; larger ones need `pdftotext`.
 - `pdftotext` is stopped after 30 seconds.
-- Word and OpenDocument files whose text is larger than 50 MB unpacked are not read.
+- Word and OpenDocument files whose text is larger than 20 MB unpacked are not read.
+- Formatting within a line (bold, italics, colours, links) and images are not taken over.
 - Files that need a password to open, the old Word format (`.doc`), spreadsheets,
   presentations and images are not read.
 
@@ -149,7 +153,8 @@ php tests/php/ExtractorTest.php   # text extraction only, also runs without GLPI
 ```
 
 `ExtractorTest` also reads the Word and OpenDocument fixtures (`tests/fixtures/change.docx`,
-`change.odt`). `HandlerTest` boots GLPI and creates its own tickets, changes and documents in the
+`change.odt`, built by `tests/fixtures/make_office_fixtures.py`: headings, lists, a table and parts
+that must be left out). `HandlerTest` boots GLPI and creates its own tickets, changes and documents in the
 database of the instance, and purges them at the end; it also covers files attached again, the
 processing of files attached before, the console command, the massive action and the button at
 the attachments (server side). `ConfigTest` checks the configuration page (saving, access,

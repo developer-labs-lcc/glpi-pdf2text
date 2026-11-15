@@ -56,8 +56,8 @@ msgstr "Word (DOCX)"
 msgid "OpenDocument text (ODT)"
 msgstr "OpenDocument text (ODT)"
 
-msgid "Word and OpenDocument files need the PHP extensions zip and xmlreader, which are missing on this server."
-msgstr "Word and OpenDocument files need the PHP extensions zip and xmlreader, which are missing on this server."
+msgid "Word and OpenDocument files need the PHP extensions zip and dom, which are missing on this server."
+msgstr "Word and OpenDocument files need the PHP extensions zip and dom, which are missing on this server."
 
 msgid "Files attached before"
 msgstr "Files attached before"

@@ -5,9 +5,10 @@
 - First version: the text of PDF attachments is added as a followup to tickets, changes and problems
   (mail collector, form, API; also PDFs in followups, tasks and solutions).
 - Text extraction with pdftotext (poppler-utils) or, as a fallback, the bundled PHP parser.
-- Word (DOCX) and OpenDocument (ODT) files are read as well (without extra program; tables kept
-  as lines with tab-separated cells, comments and deleted text left out); file types can be
-  switched off one by one.
+- Word (DOCX) and OpenDocument (ODT) files are read as well (without extra program) and added
+  formatted: headings, paragraphs, bulleted and numbered lists (also nested) and tables, with
+  wrapping lines; footnotes, comments, tables of contents and deleted text left out. File types
+  can be switched off one by one.
 - No second followup for a file attached again to the same ticket, change or problem (recognised
   by its checksum; table `glpi_plugin_pdf2text_processedfiles`). Followups written before are
   recognised by their content.

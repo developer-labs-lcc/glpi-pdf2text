@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.0
+ * @version   1.2.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -79,7 +79,24 @@ foreach ([OfficeTextExtractor::DOCX, OfficeTextExtractor::ODT] as $format) {
     $check('search token found', str_contains($text, 'OKAPI-0815'));
     $check('deleted text left out', !str_contains($text, 'DELETED-WORD'));
     $check('no field codes, comments or styles', !str_contains($text, 'FIELDCODE') && !str_contains($text, 'COMMENT-TEXT') && !str_contains($text, 'STYLE-NOT-TEXT'));
+    $check('no footnotes and no generated table of contents', !str_contains($text, 'FOOTNOTE-TEXT') && !str_contains($text, 'TOC-ENTRY'));
+    $check('paragraphs separated by an empty line', str_contains($text, "Zürich\n\nKey"));
+    $check(
+        'bullets, nested numbered list, numbered list starting at 1',
+        str_contains($text, "• Bullet one\n  1. Sub step A\n  2. Sub step B\n• Bullet two\n1. Numbered one\n2. Numbered two"),
+        $text,
+    );
+
+    $blocks = $office->extractBlocks($fixtures . 'change.' . $format, $format);
+    [$html, $short] = OfficeTextExtractor::toHtml($blocks, 100000);
+    $check('HTML: headings', str_contains($html, '<h3>Change Notification CN-2026-0815</h3>') && str_contains($html, '<h4>Steps</h4>'), $html);
+    $check('HTML: nested lists', str_contains($html, '<ul><li>Bullet one<ol><li>Sub step A</li><li>Sub step B</li></ol></li><li>Bullet two</li></ul><ol><li>Numbered one</li><li>Numbered two</li></ol>'));
+    $check('HTML: table, escaped text, line break', str_contains($html, '<td>Core router R1</td><td>Outage 15 min</td>') && str_contains($html, 'Kärnten &amp; Zürich') && str_contains($html, 'Value<br>second line'));
+    $check('HTML: not shortened', !$short);
+    [$html, $short] = OfficeTextExtractor::toHtml($blocks, 80);
+    $check('HTML: shortened to the maximum length, lists closed', $short && !str_contains($html, 'OKAPI') && substr_count($html, '<ul>') === substr_count($html, '</ul>'), $html);
 }
+$check('DOCX: text box read once (no copy for old programs)', substr_count($office->extract($fixtures . 'change.docx', 'docx'), 'Box text') === 1);
 $check('ODT: several spaces (text:s) kept', str_contains($office->extract($fixtures . 'change.odt', 'odt'), 'A   B kept'));
 
 $not_zip = tempnam(sys_get_temp_dir(), 'pdf2text');

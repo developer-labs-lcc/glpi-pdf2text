@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.0
+ * @version   1.1.1
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -75,7 +75,7 @@ final class ConfigController extends AbstractController
             'action'   => $action,
             'settings' => $settings,
             'method'   => (new PdfTextExtractor(Cast::string($settings['pdftotext_path'])))->getMethod(),
-            // DOCX and ODT need the PHP extensions zip and xmlreader
+            // DOCX and ODT need the PHP extensions zip and dom
             'office_ok' => OfficeTextExtractor::isAvailable(),
             'csrf_token' => self::getCsrfToken(),
         ]);

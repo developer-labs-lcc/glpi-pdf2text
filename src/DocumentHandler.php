@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.2.0
+ * @version   1.3.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -234,9 +234,18 @@ final class DocumentHandler
         }
         self::$done[$key] = true;
 
-        $text = $format === 'pdf'
-            ? (new PdfTextExtractor(Cast::string(Settings::get('pdftotext_path'))))->extract($path)
-            : (new OfficeTextExtractor())->extract($path, $format);
+        $max_chars = Settings::getInt('max_chars', 1000, 1000000);
+        if ($format === 'pdf') {
+            $text = (new PdfTextExtractor(Cast::string(Settings::get('pdftotext_path'))))->extract($path);
+            // PDF: the text in a <pre> block, so that the columns of pdftotext stay aligned
+            [$text, $shortened] = PdfTextExtractor::truncate($text, $max_chars);
+            $body = '<pre>' . htmlescape($text) . '</pre>';
+        } else {
+            // Word, OpenDocument: formatted (headings, paragraphs, lists, tables), lines wrap
+            $blocks = (new OfficeTextExtractor())->extractBlocks($path, $format);
+            $text   = OfficeTextExtractor::toText($blocks);
+            [$body, $shortened] = OfficeTextExtractor::toHtml($blocks, $max_chars);
+        }
         if ($text === '') {
             // Scanned PDF without text layer, document with images only: nothing to copy.
             Toolbox::logInFile(self::LOG, sprintf(
@@ -247,13 +256,11 @@ final class DocumentHandler
             return self::EMPTY;
         }
 
-        [$text, $shortened] = PdfTextExtractor::truncate($text, Settings::getInt('max_chars', 1000, 1000000));
-
         $followup = new ITILFollowup();
         $followup_id = $followup->add([
             'itemtype'      => $parent::class,
             'items_id'      => $parent->getID(),
-            'content'       => self::buildContent($filename, $format, $text, $shortened),
+            'content'       => self::buildContent($filename, $format, $body, $shortened),
             'is_private'    => Cast::int(Settings::get('is_private')),
             // No mail for this followup: the notification for the ticket or followup itself is enough.
             '_disablenotif' => true,
@@ -301,17 +308,16 @@ final class DocumentHandler
     }
 
     /**
-     * HTML of the followup: a heading with the file name and the text in a <pre> block,
-     * so that line breaks and the column layout of pdftotext are kept. ProcessedFiles also
-     * recognises followups of earlier versions by these two parts.
+     * HTML of the followup: a heading with the file name, then the text ($body: a <pre> block for
+     * PDFs, formatted HTML for Word and OpenDocument). ProcessedFiles recognises followups of
+     * earlier versions by the file name in the heading and their <pre> block.
      */
-    private static function buildContent(string $filename, string $format, string $text, bool $shortened): string
+    private static function buildContent(string $filename, string $format, string $body, bool $shortened): string
     {
         $heading = $format === 'pdf'
             ? sprintf(__('Text of the PDF attachment "%s"', 'pdf2text'), $filename)
             : sprintf(__('Text of the attachment "%s"', 'pdf2text'), $filename);
-        $html = '<p><strong>' . htmlescape($heading) . '</strong></p>'
-            . '<pre>' . htmlescape($text) . '</pre>';
+        $html = '<p><strong>' . htmlescape($heading) . '</strong></p>' . $body;
         if ($shortened) {
             $html .= '<p><em>' . htmlescape(__('The text was shortened. The complete text is in the attachment.', 'pdf2text')) . '</em></p>';
         }

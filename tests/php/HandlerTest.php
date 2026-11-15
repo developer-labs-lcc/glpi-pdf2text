@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.2.1
+ * @version   1.2.2
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -24,6 +24,7 @@ require __DIR__ . '/bootstrap.php';
 /** @var DBmysql $DB */
 global $DB;
 
+use Glpi\RichText\RichText;
 use GlpiPlugin\Pdf2text\AttachmentButton;
 use GlpiPlugin\Pdf2text\Console\ProcessCommand;
 use GlpiPlugin\Pdf2text\Controller\AttachmentController;
@@ -140,7 +141,13 @@ $office_followups = followups_with($office, 'OKAPI-0815');
 check('one followup each for DOCX and ODT', count($office_followups) === 2, (string) count($office_followups));
 check('heading names the file', count(followups_with($office, 'Text of the attachment &quot;' . run_id() . '-change.docx')) === 1
     || count(followups_with($office, 'Text of the attachment "' . run_id() . '-change.docx')) === 1);
-check('table row kept in the text', count(followups_with($office, "Core router R1\tOutage 15 min")) === 2);
+check('table kept as a table', count(followups_with($office, '<td>Core router R1</td><td>Outage 15 min</td>')) === 2);
+$office_html = (string) (followups_with($office, '.docx')[0]['content'] ?? '');
+check('formatted: heading, nested lists, no <pre> block', str_contains($office_html, '<h3>Change Notification CN-2026-0815</h3>')
+    && str_contains($office_html, '<ul><li>Bullet one<ol><li>Sub step A</li>') && !str_contains($office_html, '<pre>'), mb_substr($office_html, 0, 300));
+// GLPI cleans the HTML of followups for the display: lists, headings and tables stay
+$shown = RichText::getEnhancedHtml($office_html);
+check('lists, headings and tables survive GLPI\'s cleaning for the display', str_contains($shown, '<li>Sub step A</li>') && str_contains($shown, '<h4>Steps</h4>') && str_contains($shown, '<td>Core router R1</td>'), mb_substr($shown, 0, 300));
 Settings::set(['type_docx' => 0]);
 $no_docx = $create(Ticket::class, 'DOCX off ticket', ['change.docx', 'change.odt']);
 check('file type switched off: only the ODT is read', count(followups_with($no_docx, 'OKAPI-0815')) === 1);
@@ -173,7 +180,7 @@ check('two files remembered for the ticket', $rows === 2, (string) $rows);
 section('files attached before (processItem)');
 Settings::set(['on_ticket' => 0]);
 $before = $create(Ticket::class, 'Before ticket', ['change.pdf', 'change.odt', 'scan.pdf', 'notes.txt']);
-check('type switched off: nothing added on creation', count(followups_with($before, '<pre>')) === 0);
+check('type switched off: nothing added on creation', count(followups_with($before, 'Text of the ')) === 0);
 Settings::set(['on_ticket' => 1]);
 DocumentHandler::reset();
 $task = new TicketTask();
@@ -182,11 +189,11 @@ check('DOCX in a new task is read at once', count(followups_with($before, 'OKAPI
 DocumentHandler::reset();
 $dry = DocumentHandler::processItem($before, true);
 check('dry run: PDF and ODT to read, DOCX read before', $dry[DocumentHandler::PENDING] === 3 && $dry[DocumentHandler::DONE] === 1, json_encode($dry) ?: '');
-check('dry run adds nothing', count(followups_with($before, '<pre>')) === 1);
+check('dry run adds nothing', count(followups_with($before, 'Text of the ')) === 1);
 DocumentHandler::reset();
 $counts = DocumentHandler::processItem($before);
 check('processItem: PDF and ODT added, scan without text', $counts[DocumentHandler::ADDED] === 2 && $counts[DocumentHandler::EMPTY] === 1 && $counts[DocumentHandler::DONE] === 1, json_encode($counts) ?: '');
-check('text followups now: PDF, ODT, DOCX', count(followups_with($before, '<pre>')) === 3);
+check('text followups now: PDF, ODT, DOCX', count(followups_with($before, 'Text of the ')) === 3);
 DocumentHandler::reset();
 $counts = DocumentHandler::processItem($before);
 check('second run: everything read before', $counts[DocumentHandler::ADDED] === 0 && $counts[DocumentHandler::DONE] === 4, json_encode($counts) ?: '');

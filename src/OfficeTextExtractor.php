@@ -6,26 +6,36 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.0
+ * @version   2.0.0
  * @created   2026-11-15
+ * @changed   2026-11-15
  */
 
 namespace GlpiPlugin\Pdf2text;
 
+use DOMDocument;
+use DOMElement;
+use DOMNode;
+use DOMXPath;
 use RuntimeException;
-use XMLReader;
 use ZipArchive;
 
+use function Safe\preg_match;
 use function Safe\preg_replace;
 
 /**
- * Reads the text of Word documents (.docx) and OpenDocument texts (.odt).
+ * Reads Word documents (.docx) and OpenDocument texts (.odt) with their structure: headings,
+ * paragraphs, bulleted and numbered lists (with their nesting) and tables.
  *
  * Both formats are ZIP archives with the text in one XML file (DOCX: word/document.xml,
- * ODT: content.xml), so no extra library is needed: the XML is read with PHP's XMLReader.
- * Paragraphs become lines, table cells are separated by tabs and table rows become lines,
- * like the layout pdftotext gives for tables. Headers, footers, footnotes, comments and
- * deleted text of tracked changes are left out.
+ * ODT: content.xml), so no extra library is needed: the XML is read with PHP's DOM. Whether a
+ * list is numbered and which paragraphs are headings is taken from the styles of the document
+ * (DOCX: word/styles.xml and word/numbering.xml; ODT: the list styles in content.xml and
+ * styles.xml).
+ *
+ * The result is a list of blocks (see extractBlocks()), which toText() turns into plain text and
+ * toHtml() into the HTML of a followup. Headers, footers, footnotes, comments and deleted text of
+ * tracked changes are left out.
  *
  * The class does not depend on GLPI, so it can be tested on its own.
  */
@@ -42,25 +52,66 @@ final class OfficeTextExtractor
 
     /**
      * Larger (unpacked) XML files are not read: a few kilobytes of ZIP can unpack to gigabytes
-     * ("zip bomb"), and the XML is kept in memory.
+     * ("zip bomb"), and the DOM of the XML needs several times its size in memory.
      */
-    private const MAX_XML_BYTES = 50 * 1024 * 1024;
+    private const MAX_XML_BYTES = 20 * 1024 * 1024;
 
-    /** XML namespaces of the elements that matter (WordprocessingML, ODF text, ODF table, ODF office). */
+    /** XML namespaces (WordprocessingML, markup compatibility; ODF office, text, table, style). */
     private const NS_W      = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    private const NS_MC     = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+    private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
     private const NS_TEXT   = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
     private const NS_TABLE  = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
-    private const NS_OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
+    private const NS_STYLE  = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
+
+    /** Deepest list level that is kept (deeper items are shown on this level). */
+    private const MAX_LIST_DEPTH = 9;
+
+    /** Heading levels of the document (1 = top) become <h3> … <h6> in the followup. */
+    private const HTML_HEADING_OFFSET = 2;
+
+    /** Format of the document being read */
+    private string $format = self::DOCX;
+
+    /** @var array<string, array{name: string, based_on: string, outline: int|null, num_id: string, num_level: int}> DOCX paragraph styles by id */
+    private array $docx_styles = [];
+
+    /** @var array<string, array<int, bool>> DOCX: numId => level => numbered (true) or bullets (false) */
+    private array $docx_numbering = [];
+
+    /** @var array<string, array<int, bool>> ODT: list style name => level => numbered or bullets */
+    private array $odt_list_styles = [];
+
+    /** ODT: number of the lists met so far (their ids for the item blocks) */
+    private int $odt_lists = 0;
 
     /**
-     * Returns the normalised text of the document, or an empty string if it contains no text
-     * (e.g. only images).
+     * Returns the plain text of the document (see toText()), or an empty string if it contains
+     * no text (e.g. only images).
      *
      * @param string $format self::DOCX or self::ODT
      *
      * @throws RuntimeException if the file is not a readable document of that format
      */
     public function extract(string $file, string $format): string
+    {
+        return self::toText($this->extractBlocks($file, $format));
+    }
+
+    /**
+     * Reads the blocks of the document, in their order:
+     * - ['type' => 'heading', 'level' => 1…6, 'text' => …]
+     * - ['type' => 'paragraph', 'text' => …]
+     * - ['type' => 'item', 'depth' => 1…, 'numbered' => bool, 'list' => id, 'text' => …] (list
+     *   item; "list" tells the lists apart: items of another list start again at 1)
+     * - ['type' => 'table', 'rows' => [[cell text, …], …]]
+     * Texts may contain line breaks ("\n") and tabs ("\t"). Empty paragraphs are left out.
+     *
+     * @return list<array<string, mixed>>
+     *
+     * @throws RuntimeException if the file is not a readable document of that format
+     */
+    public function extractBlocks(string $file, string $format): array
     {
         if (!isset(self::CONTENT_FILE[$format])) {
             throw new RuntimeException(sprintf('Unknown format "%s".', $format));
@@ -69,13 +120,42 @@ final class OfficeTextExtractor
             throw new RuntimeException(sprintf('File "%s" is not readable.', $file));
         }
         if (!self::isAvailable()) {
-            throw new RuntimeException('Word and OpenDocument files need the PHP extensions zip and xmlreader.');
+            throw new RuntimeException('Word and OpenDocument files need the PHP extensions zip and dom.');
         }
 
-        $xml  = self::readZipEntry($file, self::CONTENT_FILE[$format]);
-        $text = $format === self::DOCX ? self::docxText($xml) : self::odtText($xml);
+        $zip = new ZipArchive();
+        // Password protected Word files are not ZIP archives (but encrypted OLE files), so they
+        // fail here as well.
+        if ($zip->open($file, ZipArchive::RDONLY) !== true) {
+            throw new RuntimeException('The file is not a valid document (no ZIP archive).');
+        }
+        try {
+            $this->format = $format;
+            $content = self::readZipEntry($zip, self::CONTENT_FILE[$format], true);
+            if ($format === self::DOCX) {
+                $this->readDocxStyles($zip);
+                $body = $content->getElementsByTagNameNS(self::NS_W, 'body')->item(0);
+            } else {
+                $this->odt_list_styles = [];
+                $this->odt_lists       = 0;
+                $styles = self::readZipEntry($zip, 'styles.xml', false);
+                if ($styles !== null) {
+                    $this->readOdtListStyles($styles);
+                }
+                // The automatic styles of content.xml come last: they are the ones used by the text
+                $this->readOdtListStyles($content);
+                $body = $content->getElementsByTagNameNS(self::NS_OFFICE, 'text')->item(0);
+            }
+        } finally {
+            $zip->close();
+        }
 
-        return PdfTextExtractor::normalise($text);
+        $blocks = [];
+        if ($body instanceof DOMElement) {
+            $this->walkBlocks($body, $blocks, 0, null);
+        }
+
+        return $blocks;
     }
 
     /**
@@ -84,223 +164,692 @@ final class OfficeTextExtractor
      */
     public static function isAvailable(): bool
     {
-        return class_exists(ZipArchive::class) && class_exists(XMLReader::class);
+        return class_exists(ZipArchive::class) && class_exists(DOMDocument::class);
     }
 
     /**
-     * Content of one file of the ZIP archive.
+     * Plain text of the blocks: headings and paragraphs separated by an empty line, list items
+     * with "•" or their number, indented by their depth, table rows as lines with the cells
+     * separated by tabs.
      *
-     * @throws RuntimeException if the archive or the file in it cannot be read
+     * @param list<array<string, mixed>> $blocks
      */
-    private static function readZipEntry(string $file, string $entry): string
+    public static function toText(array $blocks): string
     {
-        $zip = new ZipArchive();
-        // Password protected Word files are not ZIP archives (but encrypted OLE files), so they
-        // fail here as well.
-        if ($zip->open($file, ZipArchive::RDONLY) !== true) {
-            throw new RuntimeException('The file is not a valid document (no ZIP archive).');
-        }
-        try {
-            $stat = $zip->statName($entry);
-            if ($stat === false) {
-                throw new RuntimeException(sprintf('The document contains no "%s".', $entry));
+        $out = '';
+        // Numbers of the numbered lists per depth (restart when a list ends)
+        $numbers  = [];
+        $previous = '';
+        foreach ($blocks as $block) {
+            $type = Cast::string($block['type'] ?? '');
+            if ($type !== 'item') {
+                $numbers = [];
             }
-            if ($stat['size'] > self::MAX_XML_BYTES) {
-                throw new RuntimeException(sprintf('The text of the document is too large (%d bytes unpacked).', $stat['size']));
+            // An empty line between blocks, but the items of one list follow each other directly
+            if ($out !== '' && !($type === 'item' && $previous === 'item')) {
+                $out .= "\n";
             }
-            $xml = $zip->getFromName($entry);
-            if ($xml === false) {
-                throw new RuntimeException(sprintf('"%s" could not be unpacked.', $entry));
+            switch ($type) {
+                case 'heading':
+                case 'paragraph':
+                    $out .= Cast::string($block['text'] ?? '') . "\n";
+                    break;
+                case 'item':
+                    $depth = max(1, Cast::int($block['depth'] ?? 1));
+                    $list  = Cast::string($block['list'] ?? '');
+                    // Deeper levels start again at 1, the levels above keep their number; an item
+                    // of another list on this level starts at 1 too
+                    $numbers = array_filter($numbers, static fn(int $level) => $level <= $depth, ARRAY_FILTER_USE_KEY);
+                    if (($numbers[$depth]['list'] ?? null) !== $list) {
+                        $numbers[$depth] = ['list' => $list, 'count' => 0];
+                    }
+                    $numbers[$depth]['count']++;
+                    $mark   = (bool) ($block['numbered'] ?? false) ? $numbers[$depth]['count'] . '.' : '•';
+                    $indent = str_repeat('  ', $depth - 1);
+                    // Further lines of the item start below its text
+                    $text = str_replace("\n", "\n" . $indent . str_repeat(' ', mb_strlen($mark) + 1), Cast::string($block['text'] ?? ''));
+                    $out .= $indent . $mark . ' ' . $text . "\n";
+                    break;
+                case 'table':
+                    foreach (is_array($block['rows'] ?? null) ? $block['rows'] : [] as $row) {
+                        $out .= implode("\t", array_map(Cast::string(...), is_array($row) ? $row : [])) . "\n";
+                    }
+                    break;
             }
-        } finally {
-            $zip->close();
+            $previous = $type;
         }
 
-        return $xml;
+        return PdfTextExtractor::normalise($out);
     }
 
     /**
-     * Opens the XML for reading. LIBXML_NONET: no network access; external entities are not
-     * loaded (no LIBXML_NOENT), so the file cannot read other files of the server (XXE).
-     */
-    private static function reader(string $xml): XMLReader
-    {
-        $reader = new XMLReader();
-        if (!$reader->XML($xml, null, LIBXML_NONET | LIBXML_COMPACT)) {
-            throw new RuntimeException('The XML of the document could not be read.');
-        }
-
-        return $reader;
-    }
-
-    /**
-     * Text of word/document.xml (WordprocessingML).
+     * HTML of the blocks for a followup: <h3>…<h6>, <p>, nested <ul>/<ol> and <table>, shortened
+     * to about $max_chars characters of text (whole blocks; the last one is cut).
      *
-     * Elements used: w:p paragraph, w:t text, w:tab tab, w:br / w:cr line break, w:tc table
-     * cell, w:tr table row. Deleted text (w:delText) and field codes (w:instrText) are other
-     * elements than w:t and so left out automatically.
-     */
-    private static function docxText(string $xml): string
-    {
-        $reader = self::reader($xml);
-        $out    = '';
-        // Depth of open table cells: a paragraph inside a cell ends with a space instead of a
-        // line break, so that one table row stays on one line.
-        $cells  = 0;
-        // Whether the reader is inside a w:t element (only text there is document text)
-        $in_text = false;
-
-        while (@$reader->read()) {
-            $type = $reader->nodeType;
-            if ($type === XMLReader::ELEMENT && $reader->namespaceURI === self::NS_W) {
-                switch ($reader->localName) {
-                    case 't':
-                        $in_text = !$reader->isEmptyElement;
-                        break;
-                    case 'tab':
-                        $out .= "\t";
-                        break;
-                    case 'br':
-                    case 'cr':
-                        $out .= "\n";
-                        break;
-                    case 'tc':
-                        $cells += $reader->isEmptyElement ? 0 : 1;
-                        break;
-                }
-            } elseif ($type === XMLReader::END_ELEMENT && $reader->namespaceURI === self::NS_W) {
-                switch ($reader->localName) {
-                    case 't':
-                        $in_text = false;
-                        break;
-                    case 'p':
-                        $out .= $cells > 0 ? ' ' : "\n";
-                        break;
-                    case 'tc':
-                        $cells = max(0, $cells - 1);
-                        $out  .= "\t";
-                        break;
-                    case 'tr':
-                        $out .= "\n";
-                        break;
-                }
-            } elseif ($in_text && ($type === XMLReader::TEXT || $type === XMLReader::SIGNIFICANT_WHITESPACE || $type === XMLReader::CDATA)) {
-                $out .= $reader->value;
-            }
-        }
-        $reader->close();
-
-        return self::tidyCells($out);
-    }
-
-    /**
-     * Text of content.xml (OpenDocument).
+     * @param list<array<string, mixed>> $blocks
      *
-     * Elements used: text:p paragraph, text:h heading, text:s spaces (attribute text:c = number),
-     * text:tab tab, text:line-break line break, table:table-cell cell, table:table-row row.
-     * Only the body (office:body) is read; comments (office:annotation) and the deleted text of
-     * tracked changes (text:tracked-changes) are skipped.
+     * @return array{0: string, 1: bool} the HTML and whether it was shortened
      */
-    private static function odtText(string $xml): string
+    public static function toHtml(array $blocks, int $max_chars): array
     {
-        $reader = self::reader($xml);
-        $out    = '';
-        $cells  = 0;
-        // Depth of open text:p / text:h: text outside of paragraphs is only indentation
-        $paragraphs = 0;
-        $in_body    = false;
-        // Depth inside a skipped element (comment, tracked changes); 0 = not inside one
-        $skip = 0;
+        $html      = '';
+        $left      = $max_chars;
+        $shortened = false;
+        /** @var list<bool> $lists open lists, one entry per level: true = numbered (<ol>), false = bullets (<ul>) */
+        $lists = [];
+        // Id of the list open on each level (another list on the same level: a new <ol>/<ul>)
+        $list_ids = [];
+        /** @var array<int, bool> $open_item whether the last <li> of a level is still open (a deeper list goes into it) */
+        $open_item = [];
 
-        while (@$reader->read()) {
-            $type  = $reader->nodeType;
-            $ns    = $reader->namespaceURI;
-            $name  = $reader->localName;
-            $empty = $type === XMLReader::ELEMENT && $reader->isEmptyElement;
-
-            if ($skip > 0) {
-                // Count the nesting so that the end of the skipped element itself is found
-                if ($type === XMLReader::ELEMENT && !$empty) {
-                    $skip++;
-                } elseif ($type === XMLReader::END_ELEMENT) {
-                    $skip--;
+        // Closes the open lists down to $to_depth levels
+        $close_lists = static function (int $to_depth) use (&$html, &$lists, &$open_item): void {
+            while (count($lists) > $to_depth) {
+                $depth = count($lists);
+                if ($open_item[$depth] ?? false) {
+                    $html .= '</li>';
                 }
+                unset($open_item[$depth]);
+                $html .= array_pop($lists) ? '</ol>' : '</ul>';
+            }
+        };
+
+        foreach ($blocks as $block) {
+            if ($left <= 0) {
+                $shortened = true;
+                break;
+            }
+            $type = Cast::string($block['type'] ?? '');
+            if ($type === 'table') {
+                $close_lists(0);
+                [$table, $left, $cut] = self::tableHtml(is_array($block['rows'] ?? null) ? $block['rows'] : [], $left);
+                $html     .= $table;
+                $shortened = $shortened || $cut;
                 continue;
             }
 
-            if ($type === XMLReader::ELEMENT) {
-                if ($ns === self::NS_OFFICE && $name === 'body') {
-                    $in_body = !$empty;
-                    continue;
+            [$text, $cut] = PdfTextExtractor::truncate(Cast::string($block['text'] ?? ''), $left);
+            $left     -= mb_strlen($text);
+            $shortened = $shortened || $cut;
+            $inline    = self::inlineHtml($text);
+
+            if ($type === 'item') {
+                $depth    = max(1, min(self::MAX_LIST_DEPTH, Cast::int($block['depth'] ?? 1)));
+                $numbered = (bool) ($block['numbered'] ?? false);
+                $list_id  = Cast::string($block['list'] ?? '');
+                $close_lists($depth);
+                // Same level, other list or other kind of list: a new list
+                if (count($lists) === $depth && ($lists[$depth - 1] !== $numbered || ($list_ids[$depth] ?? '') !== $list_id)) {
+                    $close_lists($depth - 1);
                 }
-                if (!$in_body) {
-                    continue;
-                }
-                if (($ns === self::NS_OFFICE && $name === 'annotation') || ($ns === self::NS_TEXT && $name === 'tracked-changes')) {
-                    $skip = $empty ? 0 : 1;
-                    continue;
-                }
-                if ($ns === self::NS_TEXT) {
-                    switch ($name) {
-                        case 'p':
-                        case 'h':
-                            if ($empty) {
-                                // An empty paragraph is an empty line
-                                $out .= $cells > 0 ? ' ' : "\n";
-                            } else {
-                                $paragraphs++;
-                            }
-                            break;
-                        case 's':
-                            // text:c = number of spaces (default 1), at most 1000 against absurd values
-                            $count = (int) ($reader->getAttributeNs('c', self::NS_TEXT) ?? 1);
-                            $out  .= str_repeat(' ', max(1, min(1000, $count)));
-                            break;
-                        case 'tab':
-                            $out .= "\t";
-                            break;
-                        case 'line-break':
-                            $out .= "\n";
-                            break;
+                while (count($lists) < $depth) {
+                    $level = count($lists);
+                    // A deeper list belongs into an item of the level above (an empty one if
+                    // the document starts deeper)
+                    if ($level > 0 && !($open_item[$level] ?? false)) {
+                        $html .= '<li>';
+                        $open_item[$level] = true;
                     }
-                } elseif ($ns === self::NS_TABLE && $name === 'table-cell') {
-                    if ($empty) {
-                        // Empty cell: only its separator
-                        $out .= "\t";
-                    } else {
-                        $cells++;
-                    }
+                    // Levels in between (the document skips one) get bullets
+                    $kind    = $level + 1 === $depth ? $numbered : false;
+                    $lists[] = $kind;
+                    $list_ids[count($lists)] = $level + 1 === $depth ? $list_id : '';
+                    $html   .= $kind ? '<ol>' : '<ul>';
                 }
-            } elseif ($type === XMLReader::END_ELEMENT && $in_body) {
-                if ($ns === self::NS_TEXT && ($name === 'p' || $name === 'h')) {
-                    $paragraphs = max(0, $paragraphs - 1);
-                    $out       .= $cells > 0 ? ' ' : "\n";
-                } elseif ($ns === self::NS_TABLE && $name === 'table-cell') {
-                    $cells = max(0, $cells - 1);
-                    $out  .= "\t";
-                } elseif ($ns === self::NS_TABLE && $name === 'table-row') {
-                    $out .= "\n";
-                } elseif ($ns === self::NS_OFFICE && $name === 'body') {
-                    $in_body = false;
+                if ($open_item[$depth] ?? false) {
+                    $html .= '</li>';
                 }
-            } elseif ($in_body && $paragraphs > 0 && ($type === XMLReader::TEXT || $type === XMLReader::CDATA || $type === XMLReader::SIGNIFICANT_WHITESPACE)) {
-                // In ODF, runs of spaces, tabs and line breaks in the XML count as one space
-                // (real ones are written as text:s, text:tab and text:line-break, see above).
-                // [ \t\r\n]+ = one or more of these characters
-                $out .= preg_replace('/[ \t\r\n]+/', ' ', $reader->value);
+                $html .= '<li>' . $inline;
+                $open_item[$depth] = true;
+                continue;
+            }
+
+            $close_lists(0);
+            if ($type === 'heading') {
+                $level = min(6, max(1, Cast::int($block['level'] ?? 1)) + self::HTML_HEADING_OFFSET);
+                $html .= '<h' . $level . '>' . $inline . '</h' . $level . '>';
+            } else {
+                $html .= '<p>' . $inline . '</p>';
             }
         }
-        $reader->close();
+        $close_lists(0);
 
-        return self::tidyCells($out);
+        return [$html, $shortened];
     }
 
     /**
-     * Removes the spaces a paragraph end leaves at the end of a table cell, before its tab:
-     * " +\t" = one or more spaces directly before a tab.
+     * HTML of a table, shortened when the text runs out ($left characters).
+     *
+     * @param array<mixed> $rows
+     *
+     * @return array{0: string, 1: int, 2: bool} the HTML, the characters left, whether it was cut
      */
-    private static function tidyCells(string $text): string
+    private static function tableHtml(array $rows, int $left): array
     {
-        return preg_replace('/ +\t/', "\t", $text);
+        $html = '<table class="table table-sm table-bordered"><tbody>';
+        $cut  = false;
+        foreach ($rows as $row) {
+            if ($left <= 0) {
+                $cut = true;
+                break;
+            }
+            $html .= '<tr>';
+            foreach (is_array($row) ? $row : [] as $cell) {
+                [$text, $short] = PdfTextExtractor::truncate(Cast::string($cell), max(0, $left));
+                $left -= mb_strlen($text);
+                $cut   = $cut || $short;
+                $html .= '<td>' . self::inlineHtml($text) . '</td>';
+            }
+            $html .= '</tr>';
+        }
+
+        return [$html . '</tbody></table>', $left, $cut];
+    }
+
+    /**
+     * Escaped text for HTML: line breaks become <br>, tabs a space (HTML has no tab stops).
+     */
+    private static function inlineHtml(string $text): string
+    {
+        return str_replace("\n", '<br>', htmlspecialchars(str_replace("\t", ' ', $text), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+    }
+
+    /**
+     * Loads one XML file of the ZIP archive.
+     *
+     * @return ($required is true ? DOMDocument : DOMDocument|null)
+     *
+     * @throws RuntimeException if a required file is missing or cannot be read
+     */
+    private static function readZipEntry(ZipArchive $zip, string $entry, bool $required): ?DOMDocument
+    {
+        $stat = $zip->statName($entry);
+        if ($stat === false) {
+            if ($required) {
+                throw new RuntimeException(sprintf('The document contains no "%s".', $entry));
+            }
+            return null;
+        }
+        if ($stat['size'] > self::MAX_XML_BYTES) {
+            throw new RuntimeException(sprintf('The text of the document is too large (%d bytes unpacked).', $stat['size']));
+        }
+        $xml = $zip->getFromName($entry);
+        if ($xml === false) {
+            throw new RuntimeException(sprintf('"%s" could not be unpacked.', $entry));
+        }
+
+        // LIBXML_NONET: no network access. External entities are not loaded (no LIBXML_NOENT,
+        // no LIBXML_DTDLOAD), so the file cannot read other files of the server (XXE).
+        $dom = new DOMDocument();
+        if (!@$dom->loadXML($xml, LIBXML_NONET | LIBXML_COMPACT)) {
+            throw new RuntimeException(sprintf('The XML of "%s" could not be read.', $entry));
+        }
+
+        return $dom;
+    }
+
+    // ------------------------------------------------------------------ styles
+
+    /**
+     * DOCX: paragraph styles (word/styles.xml: name, base style, outline level, numbering) and the
+     * kind of each numbering (word/numbering.xml: numId -> abstract numbering -> format per level).
+     */
+    private function readDocxStyles(ZipArchive $zip): void
+    {
+        $this->docx_styles    = [];
+        $this->docx_numbering = [];
+
+        $styles = self::readZipEntry($zip, 'word/styles.xml', false);
+        if ($styles !== null) {
+            foreach ($styles->getElementsByTagNameNS(self::NS_W, 'style') as $style) {
+                if ($style->getAttributeNS(self::NS_W, 'type') !== 'paragraph') {
+                    continue;
+                }
+                $outline = self::wValue($style, 'pPr/w:outlineLvl');
+                $this->docx_styles[$style->getAttributeNS(self::NS_W, 'styleId')] = [
+                    'name'      => strtolower(self::wValue($style, 'name')),
+                    'based_on'  => self::wValue($style, 'basedOn'),
+                    'outline'   => $outline === '' ? null : (int) $outline,
+                    'num_id'    => self::wValue($style, 'pPr/w:numPr/w:numId'),
+                    'num_level' => (int) self::wValue($style, 'pPr/w:numPr/w:ilvl'),
+                ];
+            }
+        }
+
+        $numbering = self::readZipEntry($zip, 'word/numbering.xml', false);
+        if ($numbering === null) {
+            return;
+        }
+        // Abstract numberings: level => numbered (any format but bullets and none)
+        $abstract = [];
+        foreach ($numbering->getElementsByTagNameNS(self::NS_W, 'abstractNum') as $definition) {
+            $levels = [];
+            foreach ($definition->getElementsByTagNameNS(self::NS_W, 'lvl') as $level) {
+                $format = self::wValue($level, 'numFmt');
+                $levels[(int) $level->getAttributeNS(self::NS_W, 'ilvl')] = !in_array($format, ['bullet', 'none', ''], true);
+            }
+            $abstract[$definition->getAttributeNS(self::NS_W, 'abstractNumId')] = $levels;
+        }
+        foreach ($numbering->getElementsByTagNameNS(self::NS_W, 'num') as $num) {
+            $this->docx_numbering[$num->getAttributeNS(self::NS_W, 'numId')] = $abstract[self::wValue($num, 'abstractNumId')] ?? [];
+        }
+    }
+
+    /**
+     * Value (attribute w:val) of a child element given by a path below $element, e.g.
+     * "pPr/w:numPr/w:numId" (the first part without prefix), or "" if it is missing.
+     */
+    private static function wValue(DOMElement $element, string $path): string
+    {
+        if ($element->ownerDocument === null) {
+            return '';
+        }
+        $xpath = new DOMXPath($element->ownerDocument);
+        $xpath->registerNamespace('w', self::NS_W);
+        $found = $xpath->query('w:' . $path, $element);
+        $first = $found !== false ? $found->item(0) : null;
+
+        return $first instanceof DOMElement ? $first->getAttributeNS(self::NS_W, 'val') : '';
+    }
+
+    /**
+     * ODT: whether each level of each list style is numbered (text:list-level-style-number with a
+     * format) or bulleted (text:list-level-style-bullet, or a number style without format).
+     */
+    private function readOdtListStyles(DOMDocument $dom): void
+    {
+        foreach ($dom->getElementsByTagNameNS(self::NS_TEXT, 'list-style') as $style) {
+            $levels = [];
+            foreach ($style->childNodes as $level) {
+                if (!$level instanceof DOMElement || $level->namespaceURI !== self::NS_TEXT) {
+                    continue;
+                }
+                $levels[(int) $level->getAttributeNS(self::NS_TEXT, 'level')] = $level->localName === 'list-level-style-number'
+                    && $level->getAttributeNS(self::NS_STYLE, 'num-format') !== '';
+            }
+            $this->odt_list_styles[$style->getAttributeNS(self::NS_STYLE, 'name')] = $levels;
+        }
+    }
+
+    // ------------------------------------------------------------------ body
+
+    /**
+     * Walks the block elements below $parent and adds their blocks.
+     *
+     * @param list<array<string, mixed>> $blocks
+     * @param int         $depth      depth of the list the elements are in (0 = none)
+     * @param string|null $list_style ODT: style of that list
+     */
+    private function walkBlocks(DOMNode $parent, array &$blocks, int $depth, ?string $list_style): void
+    {
+        foreach ($parent->childNodes as $node) {
+            if (!$node instanceof DOMElement) {
+                continue;
+            }
+            if ($this->format === self::DOCX) {
+                $this->docxBlock($node, $blocks);
+            } else {
+                $this->odtBlock($node, $blocks, $depth, $list_style);
+            }
+        }
+    }
+
+    /**
+     * DOCX: one element of the body (paragraph, table, or a container such as a content control).
+     *
+     * @param list<array<string, mixed>> $blocks
+     */
+    private function docxBlock(DOMElement $node, array &$blocks): void
+    {
+        if ($node->namespaceURI === self::NS_MC && $node->localName === 'Fallback') {
+            // Copy of the content in an older format (shown by old programs): read only once
+            return;
+        }
+        if ($node->namespaceURI !== self::NS_W) {
+            $this->walkBlocks($node, $blocks, 0, null);
+            return;
+        }
+        switch ($node->localName) {
+            case 'p':
+                $this->docxParagraph($node, $blocks);
+                return;
+            case 'tbl':
+                $blocks[] = ['type' => 'table', 'rows' => $this->tableRows($node, self::NS_W, 'tr', 'tc')];
+                return;
+            case 'sectPr':
+            case 'del':
+            case 'moveFrom':
+                // Page settings; deleted and moved-away text of tracked changes
+                return;
+            default:
+                // Content controls (sdt / sdtContent), custom XML, inserted text, …: their content
+                $this->walkBlocks($node, $blocks, 0, null);
+        }
+    }
+
+    /**
+     * DOCX: a paragraph as a heading, list item or paragraph, after its style and numbering.
+     *
+     * @param list<array<string, mixed>> $blocks
+     */
+    private function docxParagraph(DOMElement $p, array &$blocks): void
+    {
+        $text = self::clean($this->inlineText($p));
+        if ($text === '') {
+            return;
+        }
+
+        $style_id = self::wValue($p, 'pPr/w:pStyle');
+        $style    = $this->docx_styles[$style_id] ?? null;
+
+        // Numbering of the paragraph itself, else of its style (e.g. "List Bullet"); numId 0 = none
+        $num_id = self::wValue($p, 'pPr/w:numPr/w:numId');
+        $level  = (int) self::wValue($p, 'pPr/w:numPr/w:ilvl');
+        if ($num_id === '' && $style !== null) {
+            $num_id = $style['num_id'];
+            $level  = $style['num_level'];
+        }
+        if ($num_id !== '' && $num_id !== '0') {
+            $blocks[] = [
+                'type'     => 'item',
+                'depth'    => min(self::MAX_LIST_DEPTH, $level + 1),
+                'numbered' => $this->docx_numbering[$num_id][$level] ?? false,
+                'list'     => 'docx-' . $num_id,
+                'text'     => $text,
+            ];
+            return;
+        }
+
+        $heading  = $this->docxHeadingLevel($style_id, self::wValue($p, 'pPr/w:outlineLvl'));
+        $blocks[] = $heading !== null ? ['type' => 'heading', 'level' => $heading, 'text' => $text] : ['type' => 'paragraph', 'text' => $text];
+    }
+
+    /**
+     * DOCX: heading level (1…6) of a paragraph, or null: from its outline level (0 = level 1,
+     * 9 = body text), else from the name of its style or a style it is based on ("heading 2",
+     * "title"; the names are English in every language of Word, the ids are not).
+     */
+    private function docxHeadingLevel(string $style_id, string $outline): ?int
+    {
+        if ($outline !== '') {
+            return (int) $outline < 9 ? min(6, (int) $outline + 1) : null;
+        }
+        // Up the chain of base styles (at most 10 steps, against loops)
+        for ($i = 0; $i < 10 && isset($this->docx_styles[$style_id]); $i++) {
+            $style = $this->docx_styles[$style_id];
+            if ($style['outline'] !== null) {
+                return $style['outline'] < 9 ? min(6, $style['outline'] + 1) : null;
+            }
+            // "heading" + space + digits, e.g. "heading 1"
+            if (preg_match('/^heading (\d+)$/', $style['name'], $match) === 1) {
+                return min(6, max(1, (int) ($match[1] ?? 1)));
+            }
+            if ($style['name'] === 'title') {
+                return 1;
+            }
+            $style_id = $style['based_on'];
+        }
+
+        return null;
+    }
+
+    /**
+     * ODT: one element of the body (heading, paragraph, list, table, section, …).
+     *
+     * @param list<array<string, mixed>> $blocks
+     */
+    private function odtBlock(DOMElement $node, array &$blocks, int $depth, ?string $list_style): void
+    {
+        $ns   = $node->namespaceURI;
+        $name = $node->localName;
+
+        if ($ns === self::NS_TEXT && ($name === 'h' || $name === 'p')) {
+            $text = self::clean($this->inlineText($node));
+            if ($text === '') {
+                return;
+            }
+            if ($name === 'h') {
+                $level    = (int) ($node->getAttributeNS(self::NS_TEXT, 'outline-level') ?: 1);
+                $blocks[] = ['type' => 'heading', 'level' => min(6, max(1, $level)), 'text' => $text];
+            } else {
+                $blocks[] = ['type' => 'paragraph', 'text' => $text];
+            }
+            return;
+        }
+        if ($ns === self::NS_TEXT && $name === 'list') {
+            // A nested list without own style continues the style of the list around it
+            $style   = $node->getAttributeNS(self::NS_TEXT, 'style-name') ?: $list_style;
+            $list_id = 'odt-' . ++$this->odt_lists;
+            foreach ($node->childNodes as $item) {
+                if ($item instanceof DOMElement && $item->namespaceURI === self::NS_TEXT
+                    && ($item->localName === 'list-item' || $item->localName === 'list-header')) {
+                    $this->odtListItem($item, $blocks, $depth + 1, $style, $list_id);
+                }
+            }
+            return;
+        }
+        if ($ns === self::NS_TABLE && $name === 'table') {
+            $blocks[] = ['type' => 'table', 'rows' => $this->tableRows($node, self::NS_TABLE, 'table-row', 'table-cell')];
+            return;
+        }
+        if (($ns === self::NS_TEXT && in_array($name, ['tracked-changes', 'sequence-decls', 'variable-decls', 'user-field-decls', 'table-of-content', 'alphabetical-index'], true))
+            || ($ns === self::NS_OFFICE && in_array($name, ['annotation', 'forms'], true))) {
+            // Deleted text of tracked changes, declarations, generated tables of contents and
+            // indexes (they repeat the headings), comments, form definitions
+            return;
+        }
+        // Sections, soft page breaks, frames, …: their content
+        $this->walkBlocks($node, $blocks, $depth, $list_style);
+    }
+
+    /**
+     * ODT: a list item: its first paragraph is the item, further paragraphs are further lines of
+     * the same item, nested lists go one level deeper.
+     *
+     * @param list<array<string, mixed>> $blocks
+     */
+    private function odtListItem(DOMElement $item, array &$blocks, int $depth, ?string $list_style, string $list_id): void
+    {
+        $item_index = null;
+        foreach ($item->childNodes as $child) {
+            if (!$child instanceof DOMElement) {
+                continue;
+            }
+            if ($child->namespaceURI === self::NS_TEXT && ($child->localName === 'p' || $child->localName === 'h')) {
+                $text = self::clean($this->inlineText($child));
+                if ($text === '') {
+                    continue;
+                }
+                if ($item_index === null) {
+                    $blocks[] = [
+                        'type'     => 'item',
+                        'depth'    => min(self::MAX_LIST_DEPTH, $depth),
+                        'numbered' => $this->odt_list_styles[(string) $list_style][$depth] ?? false,
+                        'list'     => $list_id,
+                        'text'     => $text,
+                    ];
+                    $item_index = array_key_last($blocks);
+                } else {
+                    $blocks[$item_index]['text'] = Cast::string($blocks[$item_index]['text']) . "\n" . $text;
+                }
+                continue;
+            }
+            // Nested list, table in an item, …
+            $this->odtBlock($child, $blocks, $depth, $list_style);
+            // Text after a nested list starts a new item of this level
+            $item_index = null;
+        }
+    }
+
+    /**
+     * Rows of a table: per cell the text of its paragraphs (separated by spaces); nested tables
+     * and lists in a cell are taken as their text.
+     *
+     * @return list<list<string>>
+     */
+    private function tableRows(DOMElement $table, string $ns, string $row_name, string $cell_name): array
+    {
+        $rows = [];
+        foreach ($table->getElementsByTagNameNS($ns, $row_name) as $row) {
+            // Only rows of this table, not of a table nested in one of its cells
+            if (self::closest($row, $ns, (string) $table->localName) !== $table) {
+                continue;
+            }
+            $cells = [];
+            foreach ($row->childNodes as $cell) {
+                if ($cell instanceof DOMElement && $cell->namespaceURI === $ns && $cell->localName === $cell_name) {
+                    $cells[] = self::clean(str_replace("\n", ' ', $this->cellText($cell)));
+                }
+            }
+            if (array_filter($cells, static fn(string $cell) => $cell !== '') !== []) {
+                $rows[] = $cells;
+            }
+        }
+
+        return $rows;
+    }
+
+    /** Text of a table cell: the text of all paragraphs in it, separated by spaces. */
+    private function cellText(DOMElement $cell): string
+    {
+        $parts = [];
+        $names = $this->format === self::DOCX ? [[self::NS_W, 'p']] : [[self::NS_TEXT, 'p'], [self::NS_TEXT, 'h']];
+        foreach ($names as [$ns, $name]) {
+            foreach ($cell->getElementsByTagNameNS($ns, $name) as $p) {
+                $parts[] = self::clean($this->inlineText($p));
+            }
+        }
+
+        return implode(' ', array_filter($parts, static fn(string $part) => $part !== ''));
+    }
+
+    /** Nearest ancestor of $node with the given name (namespace + local name), or null. */
+    private static function closest(DOMNode $node, string $ns, string $name): ?DOMElement
+    {
+        for ($parent = $node->parentNode; $parent !== null; $parent = $parent->parentNode) {
+            if ($parent instanceof DOMElement && $parent->namespaceURI === $ns && $parent->localName === $name) {
+                return $parent;
+            }
+        }
+
+        return null;
+    }
+
+    // ------------------------------------------------------------------ inline text
+
+    /**
+     * Text of a paragraph with its tabs and line breaks. Skipped: deleted text of tracked
+     * changes, field codes, comments, footnotes and endnotes, copies for old programs.
+     */
+    private function inlineText(DOMNode $node): string
+    {
+        $out = '';
+        foreach ($node->childNodes as $child) {
+            if ($child->nodeType === XML_TEXT_NODE || $child->nodeType === XML_CDATA_SECTION_NODE) {
+                if ($this->format === self::ODT) {
+                    // In ODF, runs of spaces, tabs and line breaks in the XML count as one space
+                    // (real ones are text:s, text:tab, text:line-break). [ \t\r\n]+ = one or more
+                    $out .= preg_replace('/[ \t\r\n]+/', ' ', (string) $child->nodeValue);
+                } elseif (self::isDocxText($child)) {
+                    $out .= (string) $child->nodeValue;
+                }
+                continue;
+            }
+            if ($child instanceof DOMElement) {
+                $out .= $this->format === self::DOCX ? $this->docxInline($child) : $this->odtInline($child);
+            }
+        }
+
+        return $out;
+    }
+
+    /** DOCX: text nodes count only inside w:t (elsewhere there is only indentation). */
+    private static function isDocxText(DOMNode $node): bool
+    {
+        $parent = $node->parentNode;
+
+        return $parent instanceof DOMElement && $parent->namespaceURI === self::NS_W && $parent->localName === 't';
+    }
+
+    private function docxInline(DOMElement $element): string
+    {
+        if ($element->namespaceURI === self::NS_MC && $element->localName === 'Fallback') {
+            return '';
+        }
+        if ($element->namespaceURI === self::NS_W) {
+            switch ($element->localName) {
+                case 'tab':
+                case 'ptab':
+                    return "\t";
+                case 'br':
+                case 'cr':
+                    return "\n";
+                case 'noBreakHyphen':
+                    return '-';
+                case 'p':
+                    // Paragraph of a text box inside the paragraph: on a new line
+                    return "\n" . $this->inlineText($element);
+                case 'del':
+                case 'moveFrom':
+                case 'delText':
+                case 'instrText':
+                case 'delInstrText':
+                case 'pPr':
+                case 'rPr':
+                case 'footnoteReference':
+                case 'endnoteReference':
+                case 'commentReference':
+                    return '';
+            }
+        }
+
+        // Runs, hyperlinks, inserted text, content controls, drawings with text boxes, …
+        return $this->inlineText($element);
+    }
+
+    private function odtInline(DOMElement $element): string
+    {
+        $ns   = $element->namespaceURI;
+        $name = $element->localName;
+        if ($ns === self::NS_TEXT) {
+            switch ($name) {
+                case 's':
+                    // text:c = number of spaces (default 1), at most 1000 against absurd values
+                    $count = (int) ($element->getAttributeNS(self::NS_TEXT, 'c') ?: 1);
+                    return str_repeat(' ', max(1, min(1000, $count)));
+                case 'tab':
+                    return "\t";
+                case 'line-break':
+                    return "\n";
+                case 'p':
+                case 'h':
+                    // Paragraph of a text frame inside the paragraph: on a new line
+                    return "\n" . $this->inlineText($element);
+                case 'note':
+                case 'tracked-changes':
+                case 'change':
+                    // Footnotes and endnotes, change marks
+                    return '';
+            }
+        }
+        if ($ns === self::NS_OFFICE && $name === 'annotation') {
+            return '';
+        }
+
+        // Spans, links, bookmarks, fields, frames, …
+        return $this->inlineText($element);
+    }
+
+    /**
+     * Trims a text of the document: no spaces or tabs at the start and end of its lines, no
+     * empty lines. Spaces inside a line are kept (also several in a row: they are intended).
+     */
+    private static function clean(string $text): string
+    {
+        // "[ \t]*\n[ \t]*" = a line break with spaces or tabs around it; "\n{2,}" = empty lines
+        $text = preg_replace('/[ \t]*\n[ \t]*/', "\n", $text);
+        $text = preg_replace('/\n{2,}/', "\n", $text);
+
+        return trim($text, " \t\n");
     }
 }

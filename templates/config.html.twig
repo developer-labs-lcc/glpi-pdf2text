@@ -4,7 +4,7 @@
  # @link      https://developer-labs.com/en/glpi-development/
  # @copyright Developer Labs LLC
  # @license   GPL-3.0-or-later – see LICENSE
- # @version   1.1.0
+ # @version   1.1.1
  # @created   2026-10-22
  # @changed   2026-11-15
  #}
@@ -29,7 +29,7 @@
                 </div>
             {% endfor %}
             {% if not office_ok %}
-                <div class="form-hint text-danger">{{ __('Word and OpenDocument files need the PHP extensions zip and xmlreader, which are missing on this server.', 'pdf2text') }}</div>
+                <div class="form-hint text-danger">{{ __('Word and OpenDocument files need the PHP extensions zip and dom, which are missing on this server.', 'pdf2text') }}</div>
             {% endif %}
         </div>
 
