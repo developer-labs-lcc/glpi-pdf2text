@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.3.0
+ * @version   1.4.0
  * @created   2026-10-22
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 // Text extraction without GLPI: pdftotext (if installed) and the PHP parser, scanned PDF,
@@ -200,6 +200,43 @@ if (isset($methods['pdftotext'])) {
     $text    = $limited->extract("$bomb_dir/unpacks.pdf", 100);
     $check('pdftotext: output read only up to the maximum length', $limited->wasCut() && strlen($text) <= 100 * 4 + 1024, (string) strlen($text));
 }
+// Structures that cost time or memory without text (found in the audit after Teclib's review)
+$zip_with = static function (string $file, array $entries): void {
+    $zip = new ZipArchive();
+    $zip->open($file, ZipArchive::CREATE);
+    foreach ($entries as $name => $content) {
+        $zip->addFromString($name, $content);
+    }
+    $zip->close();
+};
+$odt_ns  = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"';
+$docx_ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+// One list item with 300000 paragraphs (joining them one by one took time growing with the square)
+$zip_with("$bomb_dir/listitem.odt", ['content.xml' => "<?xml version=\"1.0\"?><office:document-content $odt_ns><office:body><office:text><text:list><text:list-item>"
+    . str_repeat('<text:p>a</text:p>', 300000) . '</text:list-item></text:list></office:text></office:body></office:document-content>']);
+// 150000 paragraph styles (each was read with its own XPath; 17 MB, below the 20 MB limit)
+$zip_with("$bomb_dir/styles.docx", [
+    'word/document.xml' => "<?xml version=\"1.0\"?><w:document $docx_ns><w:body><w:p><w:r><w:t>x</w:t></w:r></w:p></w:body></w:document>",
+    'word/styles.xml'   => "<?xml version=\"1.0\"?><w:styles $docx_ns>" . str_repeat('<w:style w:type="paragraph" w:styleId="s"><w:name w:val="n"/><w:pPr><w:outlineLvl w:val="1"/></w:pPr></w:style>', 150000) . '</w:styles>',
+]);
+// 300000 one-letter paragraphs (their structure cost memory with a high maximum length)
+$zip_with("$bomb_dir/paras.odt", ['content.xml' => "<?xml version=\"1.0\"?><office:document-content $odt_ns><office:body><office:text>"
+    . str_repeat('<text:p>a</text:p>', 300000) . '</office:text></office:body></office:document-content>']);
+foreach ([['listitem.odt', 'odt', 1000000], ['styles.docx', 'docx', 20000], ['paras.odt', 'odt', 1000000]] as [$name, $format, $max]) {
+    $started = microtime(true);
+    $before  = memory_get_usage();
+    $reader  = new OfficeTextExtractor();
+    $blocks  = $reader->extractBlocks("$bomb_dir/$name", $format, $max);
+    OfficeTextExtractor::toHtml($blocks, $max);
+    $seconds = microtime(true) - $started;
+    $used    = (memory_get_peak_usage() - $before) / 1048576;
+    $check("$name: fast and small (at most " . number_format($max) . ' characters)', $seconds < 5 && $used < 64, sprintf('%.1f s, %d MB, %d blocks', $seconds, $used, count($blocks)));
+}
+
+// PDF with an LZW stream: counted with the most it could grow to (the PHP parser unpacks LZW too)
+file_put_contents("$bomb_dir/lzw.pdf", "%PDF-1.4\n1 0 obj\n<< /Length 10000 /Filter /LZWDecode >>\nstream\n" . str_repeat("\x80", 10000) . "\nendstream\nendobj\n%%EOF\n");
+$check('PDF: LZW stream counted with its possible size', PdfTextExtractor::unpackedSize("$bomb_dir/lzw.pdf", 64 * 1048576) >= 16 * 1048576);
+
 array_map('unlink', glob("$bomb_dir/*") ?: []);
 rmdir($bomb_dir);
 

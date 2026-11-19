@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.1
+ * @version   1.1.0
  * @created   2026-11-15
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 namespace GlpiPlugin\Pdf2text\Console;
@@ -87,6 +87,15 @@ final class ProcessCommand extends AbstractCommand
             $itemtypes = $match;
         }
 
+        // --id and --limit: whole numbers above 0 if given (a mistyped value must not mean "all")
+        foreach (['id', 'limit'] as $option) {
+            $value = $input->getOption($option);
+            // ^[1-9][0-9]*$ = a whole number without sign and without leading zero
+            if ($value !== null && preg_match('/^[1-9][0-9]*$/', Cast::string($value)) !== 1) {
+                $output->writeln(sprintf('<error>--%s needs a whole number above 0.</error>', $option));
+                return self::FAILURE;
+            }
+        }
         $id = Cast::int($input->getOption('id'));
         if ($id > 0 && $asked === '') {
             $output->writeln('<error>--id needs --itemtype.</error>');
@@ -108,7 +117,8 @@ final class ProcessCommand extends AbstractCommand
             if (!$item instanceof CommonITILObject) {
                 continue;
             }
-            $where = $id > 0 ? ['id' => $id] : [];
+            // Objects in the trash are left as they are
+            $where = ['is_deleted' => 0] + ($id > 0 ? ['id' => $id] : []);
             if ($since !== '') {
                 $where['date'] = ['>=', $since . ' 00:00:00'];
             }

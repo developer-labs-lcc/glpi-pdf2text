@@ -6,8 +6,8 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.2.0
- * @changed   2026-11-15
+ * @version   1.3.0
+ * @changed   2026-11-19
  * @created   2026-11-15
  */
 
@@ -97,7 +97,11 @@ final class MassiveActions
         $last = array_key_last($ids);
         foreach ($ids as $index => $id) {
             $result = MassiveAction::ACTION_KO;
-            if ($item->getFromDB(Cast::int($id))) {
+            if (!$item->can(Cast::int($id), READ) || !AttachmentButton::mayUse($item)) {
+                // Per object as well: GLPI passes the posted ids on unchecked, and the right to
+                // change the configuration is not tied to entities
+                $result = MassiveAction::ACTION_NORIGHT;
+            } elseif ($item->getFromDB(Cast::int($id))) {
                 $counts = DocumentHandler::processItem($item);
                 foreach ([DocumentHandler::ADDED, DocumentHandler::EMPTY, DocumentHandler::DONE, DocumentHandler::FAILED] as $key) {
                     $totals[$key] += $counts[$key];

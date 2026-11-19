@@ -137,3 +137,6 @@ msgstr[1] "%d Dateien konnten nicht gelesen werden (siehe files/_log/pdf2text.lo
 
 msgid "no attachments with text"
 msgstr "keine Anhänge mit Text"
+
+msgid "The text of this file was added before."
+msgstr "Der Text dieser Datei wurde bereits übernommen."

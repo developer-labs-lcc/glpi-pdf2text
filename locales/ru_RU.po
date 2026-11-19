@@ -141,3 +141,6 @@ msgstr[2] "%d файлов не удалось прочитать (см. files/_
 
 msgid "no attachments with text"
 msgstr "нет вложений с текстом"
+
+msgid "The text of this file was added before."
+msgstr "Текст этого файла уже был добавлен."

@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.2.1
+ * @version   1.3.0
  * @created   2026-10-22
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 use Glpi\Plugin\Hooks;
@@ -55,6 +55,15 @@ function plugin_init_pdf2text(): void
         Change::class       => [ProcessedFiles::class, 'onItemPurge'],
         Problem::class      => [ProcessedFiles::class, 'onItemPurge'],
         ITILFollowup::class => [ProcessedFiles::class, 'onFollowupPurge'],
+        // A file taken off the ticket: its text is made private (see ProcessedFiles::hideTexts())
+        Document_Item::class => [ProcessedFiles::class, 'onDocumentUnlink'],
+    ];
+    // A followup or task made private: the texts of its files are made private as well
+    $PLUGIN_HOOKS[Hooks::ITEM_UPDATE]['pdf2text'] = [
+        ITILFollowup::class => [ProcessedFiles::class, 'onSourceUpdate'],
+        TicketTask::class   => [ProcessedFiles::class, 'onSourceUpdate'],
+        ChangeTask::class   => [ProcessedFiles::class, 'onSourceUpdate'],
+        ProblemTask::class  => [ProcessedFiles::class, 'onSourceUpdate'],
     ];
 
     // Massive action "Copy the text of the attachments" in the lists of tickets, changes and

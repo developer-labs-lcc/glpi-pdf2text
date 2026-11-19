@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.2
+ * @version   1.1.3
  * @created   2026-10-22
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 namespace GlpiPlugin\Pdf2text\Controller;
@@ -56,10 +56,12 @@ final class ConfigController extends AbstractController
             // Only an absolute path to a program named pdftotext is accepted (else: search the usual
             // places); the program is started without a shell.
             $path = trim((string) $request->request->get('pdftotext_path', ''));
-            $values['pdftotext_path'] = str_starts_with($path, '/') && PdfTextExtractor::isPdftotextPath($path) ? mb_substr($path, 0, 255) : '';
+            // (checked after shortening to the length of the field, so that the stored path is the checked one)
+            $path = mb_substr($path, 0, 255);
+            $values['pdftotext_path'] = str_starts_with($path, '/') && PdfTextExtractor::isPdftotextPath($path) ? $path : '';
 
             Settings::set($values);
-            Session::addMessageAfterRedirect(__('The configuration was saved.', 'pdf2text'));
+            Session::addMessageAfterRedirect(htmlescape(__('The configuration was saved.', 'pdf2text')));
 
             return new RedirectResponse($action);
         }

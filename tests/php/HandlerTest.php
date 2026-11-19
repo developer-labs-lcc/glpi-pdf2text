@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.3.1
+ * @version   1.4.0
  * @created   2026-10-22
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 // Integration with GLPI: new ticket with a PDF (as created by the mail collector), scanned
@@ -423,6 +423,120 @@ $_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
 section('simplified interface');
 $attributes = (new ReflectionMethod(AttachmentController::class, 'attachment'))->getAttributes(SecurityStrategy::class);
 check('button address open to every logged-in user (rights checked per file)', count($attributes) === 1 && ($attributes[0]->getArguments()[0] ?? '') === Firewall::STRATEGY_AUTHENTICATED);
+
+section('take into account (TTO)');
+// Followups of the plugin are no answer: the ticket must not count as "taken into account"
+// (the test runs on the command line, like the mail collector, where GLPI would set it at once)
+$tto = $create(Ticket::class, 'TTO ticket', ['change.pdf']);
+$tto->getFromDB($tto->getID());
+check('text added', count(pdf_followups($tto)) === 1);
+check('ticket not taken into account by the text followup', (int) $tto->fields['takeintoaccount_delay_stat'] === 0 && empty($tto->fields['takeintoaccountdate']), json_encode([$tto->fields['takeintoaccount_delay_stat'], $tto->fields['takeintoaccountdate']]) ?: '');
+
+section('visibility of the source');
+Settings::set(['is_private' => 0]);
+// A public task: requesters may have no right to see tasks, so its text is private
+$task_vis = $create(Ticket::class, 'Public task ticket', []);
+DocumentHandler::reset();
+(new TicketTask())->add(['tickets_id' => $task_vis->getID(), 'content' => 'Public task', 'is_private' => 0, '_filename' => [upload('change.pdf')]]);
+check('file only on a public task: private followup', (int) (pdf_followups($task_vis)[0]['is_private'] ?? 0) === 1);
+// A public followup: public text; made private later, the text becomes private too
+$fup_vis = $create(Ticket::class, 'Public followup ticket', []);
+DocumentHandler::reset();
+$source = new ITILFollowup();
+$source_id = (int) $source->add(['itemtype' => Ticket::class, 'items_id' => $fup_vis->getID(), 'content' => 'Mail', 'is_private' => 0, '_filename' => [upload('change.pdf')]]);
+check('file on a public followup: public text', (int) (pdf_followups($fup_vis)[0]['is_private'] ?? 1) === 0);
+$source->update(['id' => $source_id, 'is_private' => 1]);
+check('source followup made private: text made private', (int) (pdf_followups($fup_vis)[0]['is_private'] ?? 0) === 1);
+// File on the ticket itself, then taken off: its text is made private
+$unlink_ticket = $create(Ticket::class, 'Unlink ticket', ['change.odt']);
+check('file on the ticket: public text', (int) (followups_with($unlink_ticket, 'OKAPI-0815')[0]['is_private'] ?? 1) === 0);
+$link = new Document_Item();
+$link->getFromDBByCrit(['itemtype' => Ticket::class, 'items_id' => $unlink_ticket->getID()]);
+$link->delete(['id' => $link->getID()], true);
+check('file taken off the ticket: text made private', (int) (followups_with($unlink_ticket, 'OKAPI-0815')[0]['is_private'] ?? 0) === 1);
+Settings::set(['is_private' => 1]);
+
+section('marker of the followups');
+$marked = $create(Ticket::class, 'Marked ticket', []);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $marked->getID(), 'content' => 'Mail', '_filename' => [upload_same('change.pdf', 6)]]);
+$marked_text = (string) (pdf_followups($marked)[0]['content'] ?? '');
+check('followup carries the checksum of the file', preg_match('/data-pdf2text="[0-9a-f]{40}"/', $marked_text) === 1, mb_substr($marked_text, 0, 120));
+// As after a merge of tickets: the text followup is copied to another ticket, then the file
+$merged = $create(Ticket::class, 'Merge target ticket', []);
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $merged->getID(), 'content' => $marked_text, '_disablenotif' => true]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $merged->getID(), 'content' => 'Copied file', '_filename' => [upload_same('change.pdf', 6)]]);
+check('copied text recognised by its marker: no second followup', count(pdf_followups($merged)) === 1, (string) count(pdf_followups($merged)));
+
+section('followups of earlier versions in other languages');
+$french = $create(Ticket::class, 'French ticket', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $french->getID(), 'content' => 'Mail', '_filename' => [upload_same('change.docx', 7)]]);
+Settings::set(['on_ticket' => 1]);
+$french_old = (int) (new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $french->getID(), 'content' => "<p><strong>Texte de la pièce jointe «\u{00A0}" . htmlescape(run_id() . '-7-change.docx') . "\u{00A0}»</strong></p><h3>x</h3>", '_disablenotif' => true]);
+$DB->update(ITILFollowup::getTable(), ['date_creation' => '2020-01-01 00:00:00'], ['id' => $french_old]);
+DocumentHandler::reset();
+$counts = DocumentHandler::processItem($french);
+check('French Word followup of before the tracking recognised', $counts[DocumentHandler::DONE] === 1 && $counts[DocumentHandler::ADDED] === 0, json_encode($counts) ?: '');
+
+section('left over reservations');
+$stale = $create(Ticket::class, 'Stale ticket', []);
+$stale_file = upload_same('change.pdf', 8);
+$stale_sha = sha1_file(GLPI_TMP_DIR . '/' . $stale_file) ?: '';
+$fresh = ProcessedFiles::reserve($stale, $stale_sha, 0);
+$DB->update(ProcessedFiles::TABLE, ['date_creation' => date('Y-m-d H:i:s', time() - ProcessedFiles::STALE_AFTER - 60)], ['id' => $fresh]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $stale->getID(), 'content' => 'Mail', '_filename' => [$stale_file]]);
+check('reservation of a process that died: file read again', count(pdf_followups($stale)) === 1);
+$row = $DB->request(['FROM' => ProcessedFiles::TABLE, 'WHERE' => ['itemtype' => Ticket::class, 'items_id' => $stale->getID()]])->current();
+check('… and remembered as added', ($row['status'] ?? '') === ProcessedFiles::ADDED && (int) ($row['itilfollowups_id'] ?? 0) > 0);
+ProcessedFiles::release((int) ($row['id'] ?? 0));
+check('release() keeps rows of files read before', count($DB->request(['FROM' => ProcessedFiles::TABLE, 'WHERE' => ['id' => (int) ($row['id'] ?? 0)]])) === 1);
+
+section('closed tickets and adding again');
+$closed = $create(Ticket::class, 'Closed ticket', []);
+$closed->update(['id' => $closed->getID(), 'status' => CommonITILObject::CLOSED]);
+$closed->getFromDB($closed->getID());
+check('closed ticket: no button, no click', !AttachmentButton::mayUse($closed));
+$again_ticket = $create(Ticket::class, 'Again rights ticket', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $again_ticket->getID(), 'content' => 'Mail', '_filename' => [upload('change.pdf')]]);
+Settings::set(['on_ticket' => 1]);
+$again_doc = $document_of($again_ticket);
+$again_data = ['itemtype' => Ticket::class, 'items_id' => $again_ticket->getID(), 'documents_id' => $again_doc];
+$click($again_data);
+$followup_rights = $_SESSION['glpiactiveprofile']['followup'];
+$_SESSION['glpiactiveprofile']['followup'] = $followup_rights & ~ITILFollowup::UPDATEALL;
+$answer = $click($again_data + ['force' => '1']);
+check('without the right to update all followups: no second copy', ($answer['status'] ?? '') === 'ignored' && count(pdf_followups($again_ticket)) === 1, json_encode($answer) ?: '');
+$_SESSION['glpiactiveprofile']['followup'] = $followup_rights;
+$answer = $click($again_data + ['force' => '1']);
+check('with that right: added again', ($answer['status'] ?? '') === 'added' && count(pdf_followups($again_ticket)) === 2, json_encode($answer) ?: '');
+$_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
+
+section('massive action per object');
+$ma_closed = $new_ma();
+$closed_results = $ma_closed->results;
+MassiveActions::processMassiveActionsForOneItemtype($ma_closed, new Ticket(), [$closed->getID()]);
+check('closed ticket refused (no right)', ($ma_closed->results['noright'] ?? 0) === 1, json_encode($ma_closed->results) ?: '');
+$_SESSION['MESSAGE_AFTER_REDIRECT'] = [];
+
+section('console command: options and trash');
+$tester->execute(['--itemtype' => 'Ticket', '--id' => 'abc']);
+check('--id=abc refused (not "all")', $tester->getStatusCode() !== 0 && str_contains($tester->getDisplay(), 'whole number'), trim($tester->getDisplay()));
+$tester->execute(['--itemtype' => 'Ticket', '--limit' => '0']);
+check('--limit=0 refused', $tester->getStatusCode() !== 0);
+$trash = $create(Ticket::class, 'Trash ticket', []);
+Settings::set(['on_ticket' => 0]);
+DocumentHandler::reset();
+(new ITILFollowup())->add(['itemtype' => Ticket::class, 'items_id' => $trash->getID(), 'content' => 'Mail', '_filename' => [upload('change.pdf')]]);
+Settings::set(['on_ticket' => 1]);
+$trash->delete(['id' => $trash->getID()]);
+$tester->execute(['--itemtype' => 'Ticket', '--id' => (string) $trash->getID()]);
+check('ticket in the trash left as it is', count(pdf_followups($trash)) === 0, trim($tester->getDisplay()));
 
 section('purge');
 $purge_id = $before->getID();

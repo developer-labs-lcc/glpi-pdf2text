@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   2.2.0
+ * @version   2.3.0
  * @created   2026-11-15
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 namespace GlpiPlugin\Pdf2text;
@@ -16,7 +16,6 @@ namespace GlpiPlugin\Pdf2text;
 use DOMDocument;
 use DOMElement;
 use DOMNode;
-use DOMXPath;
 use RuntimeException;
 use ZipArchive;
 
@@ -73,6 +72,16 @@ final class OfficeTextExtractor
     /** Bytes per character for the budget: UTF-8 needs up to 4 bytes per character. */
     private const BYTES_PER_CHAR = 4;
 
+    /**
+     * Most blocks (paragraphs, list items, tables) and table cells read: a file of a few KB can
+     * hold a million tiny paragraphs; their structure costs memory and time beyond their text.
+     */
+    private const MAX_BLOCKS = 20000;
+    private const MAX_CELLS  = 50000;
+
+    /** Most paragraph styles and numbering definitions read from a DOCX (real documents have a few hundred). */
+    private const MAX_STYLES = 5000;
+
     /** Deepest list level that is kept (deeper items are shown on this level). */
     private const MAX_LIST_DEPTH = 9;
 
@@ -109,6 +118,9 @@ final class OfficeTextExtractor
 
     /** Whether the budget ran out (the text is incomplete). */
     private bool $cut = false;
+
+    /** Table cells read so far (see MAX_CELLS). */
+    private int $cells = 0;
 
     /**
      * Returns the plain text of the document (see toText()), or an empty string if it contains
@@ -154,7 +166,8 @@ final class OfficeTextExtractor
         // Margin of 1 KB: the text is shortened to $max_chars later (toHtml(), toText()), the
         // margin lets that see that there was more
         $this->left = $max_chars > 0 ? $max_chars * self::BYTES_PER_CHAR + 1024 : self::DEFAULT_BUDGET;
-        $this->cut  = false;
+        $this->cut   = false;
+        $this->cells = 0;
 
         if (!isset(self::CONTENT_FILE[$format])) {
             throw new RuntimeException(sprintf('Unknown format "%s".', $format));
@@ -463,17 +476,22 @@ final class OfficeTextExtractor
 
         $styles = self::readZipEntry($zip, 'word/styles.xml', false);
         if ($styles !== null) {
+            $read = 0;
             foreach ($styles->getElementsByTagNameNS(self::NS_W, 'style') as $style) {
                 if ($style->getAttributeNS(self::NS_W, 'type') !== 'paragraph') {
                     continue;
                 }
-                $outline = self::wValue($style, 'pPr/w:outlineLvl');
+                // At most MAX_STYLES (the rest counts as normal paragraphs)
+                if (++$read > self::MAX_STYLES) {
+                    break;
+                }
+                $outline = self::wValue($style, 'pPr', 'outlineLvl');
                 $this->docx_styles[$style->getAttributeNS(self::NS_W, 'styleId')] = [
                     'name'      => strtolower(self::wValue($style, 'name')),
                     'based_on'  => self::wValue($style, 'basedOn'),
                     'outline'   => $outline === '' ? null : (int) $outline,
-                    'num_id'    => self::wValue($style, 'pPr/w:numPr/w:numId'),
-                    'num_level' => (int) self::wValue($style, 'pPr/w:numPr/w:ilvl'),
+                    'num_id'    => self::wValue($style, 'pPr', 'numPr', 'numId'),
+                    'num_level' => (int) self::wValue($style, 'pPr', 'numPr', 'ilvl'),
                 ];
             }
         }
@@ -484,34 +502,67 @@ final class OfficeTextExtractor
         }
         // Abstract numberings: level => numbered (any format but bullets and none)
         $abstract = [];
+        $read     = 0;
         foreach ($numbering->getElementsByTagNameNS(self::NS_W, 'abstractNum') as $definition) {
+            if (++$read > self::MAX_STYLES) {
+                break;
+            }
             $levels = [];
-            foreach ($definition->getElementsByTagNameNS(self::NS_W, 'lvl') as $level) {
+            // Levels are direct children (w:lvl); at most 9 are used by Word
+            foreach (self::wChildren($definition, 'lvl') as $level) {
+                if (count($levels) >= self::MAX_LIST_DEPTH) {
+                    break;
+                }
                 $format = self::wValue($level, 'numFmt');
                 $levels[(int) $level->getAttributeNS(self::NS_W, 'ilvl')] = !in_array($format, ['bullet', 'none', ''], true);
             }
             $abstract[$definition->getAttributeNS(self::NS_W, 'abstractNumId')] = $levels;
         }
+        $read = 0;
         foreach ($numbering->getElementsByTagNameNS(self::NS_W, 'num') as $num) {
+            if (++$read > self::MAX_STYLES) {
+                break;
+            }
             $this->docx_numbering[$num->getAttributeNS(self::NS_W, 'numId')] = $abstract[self::wValue($num, 'abstractNumId')] ?? [];
         }
     }
 
     /**
-     * Value (attribute w:val) of a child element given by a path below $element, e.g.
-     * "pPr/w:numPr/w:numId" (the first part without prefix), or "" if it is missing.
+     * Value (attribute w:val) of a descendant given by the names of the elements on the way
+     * down, e.g. wValue($p, 'pPr', 'numPr', 'numId') for <w:pPr><w:numPr><w:numId w:val="…">;
+     * "" if it is missing. Only direct children are looked at on each step (no XPath, which
+     * would cost time for every call on a large document).
      */
-    private static function wValue(DOMElement $element, string $path): string
+    private static function wValue(DOMElement $element, string ...$path): string
     {
-        if ($element->ownerDocument === null) {
-            return '';
+        $current = $element;
+        foreach ($path as $name) {
+            $next = null;
+            foreach (self::wChildren($current, $name) as $child) {
+                $next = $child;
+                break;
+            }
+            if ($next === null) {
+                return '';
+            }
+            $current = $next;
         }
-        $xpath = new DOMXPath($element->ownerDocument);
-        $xpath->registerNamespace('w', self::NS_W);
-        $found = $xpath->query('w:' . $path, $element);
-        $first = $found !== false ? $found->item(0) : null;
 
-        return $first instanceof DOMElement ? $first->getAttributeNS(self::NS_W, 'val') : '';
+        return $current->getAttributeNS(self::NS_W, 'val');
+    }
+
+    /**
+     * The direct child elements of $element with the WordprocessingML name $name.
+     *
+     * @return iterable<DOMElement>
+     */
+    private static function wChildren(DOMElement $element, string $name): iterable
+    {
+        foreach ($element->childNodes as $child) {
+            if ($child instanceof DOMElement && $child->namespaceURI === self::NS_W && $child->localName === $name) {
+                yield $child;
+            }
+        }
     }
 
     /**
@@ -545,8 +596,8 @@ final class OfficeTextExtractor
     private function walkBlocks(DOMNode $parent, array &$blocks, int $depth, ?string $list_style): void
     {
         foreach ($parent->childNodes as $node) {
-            // Budget spent: the rest of the document is not read
-            if ($this->left <= 0) {
+            // Budget spent or too many blocks: the rest of the document is not read
+            if ($this->left <= 0 || count($blocks) >= self::MAX_BLOCKS) {
                 $this->cut = true;
                 return;
             }
@@ -606,12 +657,12 @@ final class OfficeTextExtractor
             return;
         }
 
-        $style_id = self::wValue($p, 'pPr/w:pStyle');
+        $style_id = self::wValue($p, 'pPr', 'pStyle');
         $style    = $this->docx_styles[$style_id] ?? null;
 
         // Numbering of the paragraph itself, else of its style (e.g. "List Bullet"); numId 0 = none
-        $num_id = self::wValue($p, 'pPr/w:numPr/w:numId');
-        $level  = (int) self::wValue($p, 'pPr/w:numPr/w:ilvl');
+        $num_id = self::wValue($p, 'pPr', 'numPr', 'numId');
+        $level  = (int) self::wValue($p, 'pPr', 'numPr', 'ilvl');
         if ($num_id === '' && $style !== null) {
             $num_id = $style['num_id'];
             $level  = $style['num_level'];
@@ -627,7 +678,7 @@ final class OfficeTextExtractor
             return;
         }
 
-        $heading  = $this->docxHeadingLevel($style_id, self::wValue($p, 'pPr/w:outlineLvl'));
+        $heading  = $this->docxHeadingLevel($style_id, self::wValue($p, 'pPr', 'outlineLvl'));
         $blocks[] = $heading !== null ? ['type' => 'heading', 'level' => $heading, 'text' => $text] : ['type' => 'paragraph', 'text' => $text];
     }
 
@@ -735,36 +786,47 @@ final class OfficeTextExtractor
      */
     private function odtListItem(DOMElement $item, array &$blocks, int $depth, ?string $list_style, string $list_id): void
     {
-        $item_index = null;
+        // Lines of the current item, joined once at its end (joining on every paragraph would
+        // copy the growing text again and again: time growing with the square of the lines)
+        /** @var list<string> $lines */
+        $lines = [];
+        $flush = function () use (&$lines, &$blocks, $depth, $list_style, $list_id): void {
+            if ($lines !== []) {
+                $blocks[] = [
+                    'type'     => 'item',
+                    'depth'    => min(self::MAX_LIST_DEPTH, $depth),
+                    'numbered' => $this->odt_list_styles[(string) $list_style][$depth] ?? false,
+                    'list'     => $list_id,
+                    'text'     => implode("\n", $lines),
+                ];
+                $lines = [];
+            }
+        };
         foreach ($item->childNodes as $child) {
+            // The lines of an item count like blocks: a single item can hold a million paragraphs
+            if ($this->left <= 0 || count($blocks) + count($lines) >= self::MAX_BLOCKS) {
+                $this->cut = true;
+                break;
+            }
             if (!$child instanceof DOMElement) {
                 continue;
             }
             if ($child->namespaceURI === self::NS_TEXT && ($child->localName === 'p' || $child->localName === 'h')) {
                 $text = self::clean($this->inlineText($child));
-                if ($text === '') {
-                    continue;
-                }
-                if ($item_index === null) {
-                    $blocks[] = [
-                        'type'     => 'item',
-                        'depth'    => min(self::MAX_LIST_DEPTH, $depth),
-                        'numbered' => $this->odt_list_styles[(string) $list_style][$depth] ?? false,
-                        'list'     => $list_id,
-                        'text'     => $text,
-                    ];
-                    $item_index = array_key_last($blocks);
-                } else {
-                    $blocks[$item_index]['text'] = Cast::string($blocks[$item_index]['text']) . "\n" . $text;
+                // The line break between two lines counts against the budget as well
+                if ($text !== '' && ($lines === [] || $this->take("\n") !== '')) {
+                    $lines[] = $text;
                 }
                 continue;
             }
-            // Nested list, table in an item, …
+            // Nested list, table in an item, …: the lines so far are the item, text after the
+            // nested part starts a new item of this level
+            $flush();
             $this->odtBlock($child, $blocks, $depth, $list_style);
-            // Text after a nested list starts a new item of this level
-            $item_index = null;
         }
+        $flush();
     }
+
 
     /**
      * Rows of a table: per cell the text of its paragraphs (separated by spaces); nested tables
@@ -783,6 +845,11 @@ final class OfficeTextExtractor
             $cells = [];
             foreach ($row->childNodes as $cell) {
                 if ($cell instanceof DOMElement && $cell->namespaceURI === $ns && $cell->localName === $cell_name) {
+                    // Too many cells (also empty ones cost memory and time) or budget spent: stop
+                    if (++$this->cells > self::MAX_CELLS || $this->left <= 0) {
+                        $this->cut = true;
+                        break 2;
+                    }
                     $cells[] = self::clean(str_replace("\n", ' ', $this->cellText($cell)));
                 }
             }

@@ -44,10 +44,17 @@ The button at each attachment and the settings:
   attached again – e.g. a reply mail that quotes the PDF of the first mail – adds no second
   followup. Files are recognised by their checksum, not by their name: a new file with an old
   name (e.g. this month's `report.pdf`) is read. If the text followup is deleted, the file
-  counts as not read again.
-- **Private files stay private:** if a file is only attached to private followups or tasks
-  (or approvals), its text goes into a private followup, also when the setting "Private
-  followup" is off.
+  counts as not read again. The heading of each text followup carries the checksum of its file
+  (HTML attribute `data-pdf2text`), so the plugin also recognises its texts after a merge of
+  tickets or a new installation, in any language.
+- **Private files stay private:** the text is public (if the setting "Private followup" is off)
+  only when its file is attached to the ticket, change or problem itself, to a solution or to a
+  public followup – what everybody who sees the object sees. Files only on tasks (also public
+  ones: requesters may have no right to see tasks), approvals or private followups give a
+  private followup. If a followup or task is made private later, or the file is taken off the
+  ticket, its text followup is made private as well.
+- The text followup does not mark a ticket as **taken into account** (it is no answer of a
+  technician), so take-into-account times and their SLAs stay right.
 - **Scanned PDFs** (images without a text layer) are skipped – there is no OCR.
 - The followup does **not** send notifications and does **not** reopen solved tickets.
 - Problems (unreadable or broken files) are logged to `files/_log/pdf2text.log`; the ticket is
@@ -62,11 +69,13 @@ file) in front of them:
 
 - A click reads the file and adds its text as a followup; the page is reloaded to show it.
 - If the text of this file was added before, the button asks first and adds it again on
-  **Add again** (e.g. when the earlier followup was shortened or edited).
+  **Add again** (e.g. when the earlier followup was shortened or edited). Only users with the
+  right to update all followups may add a text again; others get the message that it was added
+  before.
 - Shown to the users who may add a followup to this ticket, change or problem (the same right as
-  GLPI's **Answer**), in the standard and in the simplified interface. Only at the files of this
-  object that the user may see there: not e.g. at files of private tasks without the right to
-  see private tasks.
+  GLPI's **Answer**), in the standard and in the simplified interface, not on closed objects.
+  Only at the files of this object that the user may see there: not e.g. at files of private
+  tasks without the right to see private tasks.
 - Files without text (e.g. scanned PDFs) and files that cannot be read give a message instead.
 
 GLPI has no hook for these buttons; the plugin adds the button with JavaScript
@@ -83,7 +92,8 @@ skipped, so both ways can be repeated at any time:
 
 - **Massive action:** in the list of tickets, changes or problems, choose the items and use
   **Actions > Copy the text of the attachments (PDF2Text)**. Offered to users who may change the
-  GLPI configuration, for the item types switched on in the settings. Afterwards a message says
+  GLPI configuration, for the item types switched on in the settings; each chosen object is
+  checked as well (visible to the user, not closed). Afterwards a message says
   how many followups were added and how many files were copied before, had no text or could not
   be read (a warning if a file could not be read).
 - **Console command** on the server, in the GLPI directory:
@@ -97,13 +107,16 @@ skipped, so both ways can be repeated at any time:
 
   Options: `--itemtype` / `-t` (`Ticket`, `Change` or `Problem`; default: the types switched on),
   `--id` (with `--itemtype`), `--since` / `-s` (day `YYYY-MM-DD`), `--limit` / `-l` (number of
-  items), `--dry-run`, `-v` (one line per item, also for those without anything new). The exit
-  code is 1 if a file could not be read. Run it as
+  items), `--dry-run`, `-v` (one line per item, also for those without anything new). `--id` and
+  `--limit` need a whole number above 0 (a mistyped value is refused, not taken as "all").
+  Objects in the trash are skipped. The exit code is 1 if a file could not be read. Run it as
   the user of the web server (e.g. `sudo -u www-data php bin/console …`), so that the log file
   stays writable for GLPI.
 
 Followups written by versions of the plugin before this tracking are recognised as well (by the
-file name in their heading and the text block), so these files are not read a second time.
+file name in quotes in their heading, in every language of the plugin), so these files are not
+read a second time. A file whose reading was interrupted (PHP stopped by a time or memory limit)
+is read again after 15 minutes.
 
 ## Requirements
 
@@ -207,6 +220,13 @@ that GLPI loads them and the plural forms (Russian and Polish have three). After
 file, compile it with `msgfmt --check -o locales/<lang>.mo locales/<lang>.po` and run
 `bin/console cache:clear` in GLPI.
 
+Dependencies: `smalot/pdfparser` only. `symfony/polyfill-mbstring`, which it pulls in, is marked as
+"replaced" in `composer.json` (GLPI needs the PHP extension mbstring anyway), and the plugin's
+autoloader is registered after GLPI's (`prepend-autoloader: false`), so the plugin never replaces
+a class of GLPI. The functions of `thecodingmachine/safe` (`Safe\…`) come from GLPI itself, as in
+Teclib's plugin template; the package is only a dev dependency for running the extraction tests
+without GLPI.
+
 Code style and static analysis follow Teclib's plugin template. They need the plugin in the
 `plugins/pdf2text` directory of a GLPI development checkout (`composer install` in GLPI):
 
@@ -220,8 +240,12 @@ Code style and static analysis follow Teclib's plugin template. They need the pl
 1. Raise the version in `setup.php` (`PLUGIN_PDF2TEXT_VERSION`), add it to `pdf2text.xml`
    (a new `<version>` with `<num>`, one `<compatibility>` per GLPI major version, e.g.
    `~11.0.0` and `~12.0.0`, and `<download_url>`) and describe it in `CHANGELOG.md`.
-2. `tools/release.sh` builds `dist/glpi-pdf2text-<version>.tar.bz2` and, with the same content
-   but without the parent directory, `dist/pdf2text.zip`.
+2. Commit everything, then run `tools/release.sh` on the host (needs git): it writes
+   `dist/source-<version>.tar` from the committed files of HEAD (never other files lying in the
+   directory) and refuses a working tree with uncommitted changes. Then run `tools/release.sh`
+   where composer is (e.g. in the GLPI container): it builds `dist/glpi-pdf2text-<version>.tar.bz2`
+   and, with the same content but without the parent directory, `dist/pdf2text.zip`, with the
+   library versions of `composer.lock` (versioned in git).
 3. Create a GitHub release with the tag `<version>` and attach both archives.
 
 The plugin catalog ([plugins.glpi-project.org](https://plugins.glpi-project.org/), shown in

@@ -6,14 +6,15 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.2.0
+ * @version   1.3.0
  * @created   2026-10-22
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 namespace GlpiPlugin\Pdf2text;
 
 use RuntimeException;
+use Smalot\PdfParser\Config;
 use Smalot\PdfParser\Parser;
 use Throwable;
 
@@ -25,7 +26,6 @@ use function Safe\inflate_init;
 use function Safe\ini_get;
 use function Safe\preg_match;
 use function Safe\preg_replace;
-use function Safe\proc_close;
 use function Safe\stream_get_contents;
 use function Safe\stream_set_blocking;
 
@@ -55,6 +55,17 @@ final class PdfTextExtractor
 
     /** Unpacked size of the compressed streams of a PDF up to which the PHP parser is used. */
     private const PHP_PARSER_MAX_UNPACKED = 32 * 1024 * 1024;
+
+    /** Most bytes the PHP parser unpacks from one stream (its own limit, for every filter). */
+    private const PHP_PARSER_STREAM_LIMIT = 16 * 1024 * 1024;
+
+    /**
+     * Most a byte of LZW or RunLength data can grow to when unpacked (LZW: one 9-bit code stands
+     * for up to 4096 bytes; RunLength: 2 bytes for up to 128), used to count such streams in
+     * unpackedSize() without unpacking them.
+     */
+    private const LZW_FACTOR       = 3641;
+    private const RUNLENGTH_FACTOR = 64;
 
     /** Memory the PHP parser needs, as a multiple of the size of the PDF (rough, on the safe side). */
     private const PHP_PARSER_MEMORY_FACTOR = 15;
@@ -131,7 +142,8 @@ final class PdfTextExtractor
     {
         $candidates = $this->pdftotext_path !== '' ? [$this->pdftotext_path] : self::PDFTOTEXT_CANDIDATES;
         foreach ($candidates as $candidate) {
-            if (self::isPdftotextPath($candidate) && is_file($candidate) && is_executable($candidate)) {
+            // Absolute path only: a relative one would be searched in PATH by proc_open()
+            if (str_starts_with($candidate, '/') && self::isPdftotextPath($candidate) && is_file($candidate) && is_executable($candidate)) {
                 return $candidate;
             }
         }
@@ -172,7 +184,7 @@ final class PdfTextExtractor
                 proc_terminate($process);
                 fclose($stdout);
                 fclose($stderr);
-                proc_close($process);
+                self::closeProcess($process);
                 $this->cut = true;
                 // mb_strcut: at most $budget bytes, without splitting a character
                 return mb_strcut($output, 0, $budget, 'UTF-8');
@@ -185,7 +197,7 @@ final class PdfTextExtractor
                 proc_terminate($process);
                 fclose($stdout);
                 fclose($stderr);
-                proc_close($process);
+                self::closeProcess($process);
                 throw new RuntimeException(sprintf('pdftotext did not finish within %d seconds.', self::TIMEOUT));
             }
             usleep(20000);
@@ -199,7 +211,7 @@ final class PdfTextExtractor
         }
         fclose($stdout);
         fclose($stderr);
-        proc_close($process);
+        self::closeProcess($process);
 
         // proc_get_status() reports the exit code only once, in the call that sees the end.
         if ($status['exitcode'] !== 0) {
@@ -224,10 +236,30 @@ final class PdfTextExtractor
         }
         self::ensureMemory((filesize($file) + $unpacked) * self::PHP_PARSER_MEMORY_FACTOR);
         try {
-            return (new Parser())->parseFile($file)->getText();
+            // Each compressed stream is unpacked to at most PHP_PARSER_STREAM_LIMIT bytes (FlateDecode,
+            // LZWDecode, RunLengthDecode), images are not kept in memory
+            $config = new Config();
+            $config->setDecodeMemoryLimit(self::PHP_PARSER_STREAM_LIMIT);
+            $config->setRetainImageContent(false);
+
+            return (new Parser([], $config))->parseFile($file)->getText();
         } catch (Throwable $e) {
             throw new RuntimeException('The PDF could not be parsed: ' . $e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * Closes the process of pdftotext. PHP's own proc_close() on purpose: before PHP 8.3 it
+     * returns -1 once proc_get_status() has seen the end of the process (as in runPdftotext()),
+     * which the variant of the Safe library turns into an exception; the exit code is taken
+     * from proc_get_status() instead.
+     *
+     * @param resource $process
+     */
+    private static function closeProcess($process): void
+    {
+        /** @phpstan-ignore theCodingMachineSafe.function (result not needed, see above) */
+        \proc_close($process);
     }
 
     /**
@@ -247,10 +279,11 @@ final class PdfTextExtractor
     }
 
     /**
-     * Size of the compressed streams of a PDF once unpacked (zlib / FlateDecode, by far the most
-     * common filter), counted without keeping the data: each stream is unpacked in small pieces
-     * and only the length of each piece is added up. Counting stops above $limit. Streams that
-     * are not zlib data (images, other filters) count with their packed size.
+     * Size of the compressed streams of a PDF once unpacked, counted without keeping the data:
+     * zlib streams (FlateDecode, by far the most common filter) are unpacked in small pieces and
+     * only the length of each piece is added up; LZW and RunLength streams count with the most
+     * they could grow to. Counting stops above $limit. Other streams (images, ASCII filters, which
+     * only shrink) count with their packed size.
      */
     public static function unpackedSize(string $file, int $limit): int
     {
@@ -274,7 +307,18 @@ final class PdfTextExtractor
             if ($end === false) {
                 break;
             }
-            $total += self::inflatedLength(substr($data, $begin, $end - $begin), $limit - $total);
+            $packed = substr($data, $begin, $end - $begin);
+            // Dictionary of the stream: the text since the last "<<" before "stream"
+            $dict_start = strrpos(substr($data, max(0, $start - 4096), min($start, 4096)), '<<');
+            $dict       = $dict_start === false ? '' : substr($data, max(0, $start - 4096) + $dict_start, 4096);
+            if (str_contains($dict, '/LZWDecode') || preg_match('#/LZW\b#', $dict) === 1) {
+                // Counted with the most it could grow to, limited by the parser's own stream limit
+                $total += min(strlen($packed) * self::LZW_FACTOR, self::PHP_PARSER_STREAM_LIMIT);
+            } elseif (str_contains($dict, '/RunLengthDecode') || preg_match('#/RL\b#', $dict) === 1) {
+                $total += min(strlen($packed) * self::RUNLENGTH_FACTOR, self::PHP_PARSER_STREAM_LIMIT);
+            } else {
+                $total += self::inflatedLength($packed, $limit - $total);
+            }
             if ($total > $limit) {
                 return $total;
             }

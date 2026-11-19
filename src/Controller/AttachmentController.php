@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.0
+ * @version   1.2.0
  * @created   2026-11-15
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 namespace GlpiPlugin\Pdf2text\Controller;
@@ -64,7 +64,8 @@ final class AttachmentController extends AbstractController
         }
 
         try {
-            $result = DocumentHandler::processOne($parent, $document, $request->request->getBoolean('force'));
+            // Adding the text again only with the right to update all followups (see mayForce())
+            $result = DocumentHandler::processOne($parent, $document, $request->request->getBoolean('force') && AttachmentButton::mayForce());
         } catch (Throwable $e) {
             Toolbox::logInFile('pdf2text', sprintf("Document %d (button): %s\n", $document->getID(), $e->getMessage()));
             $result = DocumentHandler::FAILED;
@@ -73,7 +74,9 @@ final class AttachmentController extends AbstractController
         return match ($result) {
             // Shown by GLPI after the page is reloaded (attachments.js reloads it)
             DocumentHandler::ADDED => self::added(),
-            DocumentHandler::DONE => self::answer('done', __('The text of this file was added before. Add it again?', 'pdf2text')),
+            DocumentHandler::DONE => AttachmentButton::mayForce()
+                ? self::answer('done', __('The text of this file was added before. Add it again?', 'pdf2text'))
+                : self::answer('ignored', __('The text of this file was added before.', 'pdf2text')),
             DocumentHandler::EMPTY => self::answer('empty', __('The file contains no text (e.g. a scanned PDF).', 'pdf2text')),
             DocumentHandler::IGNORED => self::answer('ignored', __('This file type is not read (see the settings of PDF2Text).', 'pdf2text')),
             default => self::answer('failed', __('The file could not be read (see files/_log/pdf2text.log).', 'pdf2text')),

@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.3
+ * @version   1.0.4
  * @created   2026-10-23
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 // Configuration page: rendering, CSRF token field only where GLPI uses tokens (GLPI 11, not 12),
@@ -61,6 +61,10 @@ check('path to another program rejected', Settings::get('pdftotext_path') === ''
 $controller->config(Request::create('/plugins/pdf2text/config', 'POST', ['pdftotext_path' => '/opt/poppler/bin/pdftotext']));
 Settings::reset();
 check('absolute path to pdftotext kept', Settings::get('pdftotext_path') === '/opt/poppler/bin/pdftotext');
+// Checked after shortening to 255 characters: the stored path must be the checked one
+$controller->config(Request::create('/plugins/pdf2text/config', 'POST', ['pdftotext_path' => '/' . str_repeat('a', 300) . '/pdftotext']));
+Settings::reset();
+check('path too long for the field rejected (shortened, it would name another file)', Settings::get('pdftotext_path') === '');
 
 section('access');
 $rights = $_SESSION['glpiactiveprofile']['config'];

@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.0
+ * @version   1.2.0
  * @created   2026-11-15
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 namespace GlpiPlugin\Pdf2text;
@@ -17,6 +17,7 @@ use Change;
 use CommonITILObject;
 use ITILFollowup;
 use Problem;
+use Session;
 use Ticket;
 
 use function Safe\json_encode;
@@ -78,19 +79,31 @@ final class AttachmentButton
     }
 
     /**
-     * Whether the user of the session may add a followup to the ITIL object (the same check as
-     * GLPI's "Answer" button: rights of the profile, the object is visible, and closed only if the
-     * user may reopen it; the plugin does not reopen it, see DocumentHandler).
+     * Whether the user of the session may add a followup to the ITIL object: the same check as
+     * GLPI's "Answer" button (rights of the profile, the object is visible), and not on closed
+     * objects.
      */
     public static function mayUse(CommonITILObject $item): bool
     {
-        if (!ITILFollowup::canCreate()) {
+        // Not on closed objects: GLPI allows a followup there only to reopen them, and the plugin
+        // does not reopen (its followup is no answer)
+        if (!ITILFollowup::canCreate() || in_array($item->fields['status'] ?? null, $item::getClosedStatusArray(), false)) {
             return false;
         }
         $followup = new ITILFollowup();
         $followup->fields = ['itemtype' => $item::class, 'items_id' => $item->getID()];
 
         return $followup->canCreateItem();
+    }
+
+    /**
+     * Whether the user may add the text of a file a second time ("Add again"): only with the
+     * right to update all followups, so that the button cannot be used to fill a ticket with
+     * copies.
+     */
+    public static function mayForce(): bool
+    {
+        return (bool) Session::haveRight(ITILFollowup::$rightname, ITILFollowup::UPDATEALL);
     }
 
     /**

@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.4.1
+ * @version   1.5.0
  * @created   2026-10-22
- * @changed   2026-11-15
+ * @changed   2026-11-19
  */
 
 namespace GlpiPlugin\Pdf2text;
@@ -105,7 +105,8 @@ final class DocumentHandler
     public static function processItem(CommonITILObject $parent, bool $dry_run = false): array
     {
         $counts = [self::ADDED => 0, self::EMPTY => 0, self::DONE => 0, self::PENDING => 0, self::FAILED => 0];
-        if (!Settings::isEnabledFor($parent::class)) {
+        // Objects in the trash are left as they are
+        if (!Settings::isEnabledFor($parent::class) || (bool) ($parent->fields['is_deleted'] ?? false)) {
             return $counts;
         }
 
@@ -206,11 +207,13 @@ final class DocumentHandler
     }
 
     /**
-     * Whether the document is attached to the ITIL object only through private followups or tasks
-     * (or approvals): its text then goes into a private followup, whatever the setting says, so
-     * that a requester does not read the text of a file only technicians could see.
+     * Whether the text of the document must go into a private followup, whatever the setting:
+     * it may be public only if the file is attached to the ITIL object itself, to a solution or
+     * to a public followup (what everybody who sees the object sees). Files only on tasks (also
+     * public ones: requesters may have no right to see tasks), approvals or private followups give
+     * a private followup.
      */
-    private static function onlyPrivate(CommonITILObject $parent, Document $document): bool
+    public static function mustBePrivate(CommonITILObject $parent, Document $document): bool
     {
         /** @var DBmysql $DB */
         global $DB;
@@ -220,27 +223,23 @@ final class DocumentHandler
             'FROM'   => Document_Item::getTable(),
             'WHERE'  => [Document_Item::getTableField('documents_id') => $document->getID()] + [$parent->getAssociatedDocumentsCriteria(true)],
         ]);
-        $found = false;
         foreach ($links as $link) {
             if (!is_array($link)) {
                 continue;
             }
-            $found = true;
-            $item  = getItemForItemtype(Cast::string($link['itemtype'] ?? ''));
-            if ($item instanceof ITILFollowup || $item instanceof CommonITILTask) {
-                if ($item->getFromDB(Cast::int($link['items_id'] ?? 0)) && Cast::int($item->fields['is_private'] ?? 1) === 0) {
+            $itemtype = Cast::string($link['itemtype'] ?? '');
+            if ($itemtype === $parent::class || $itemtype === ITILSolution::class) {
+                return false;
+            }
+            if ($itemtype === ITILFollowup::class) {
+                $followup = new ITILFollowup();
+                if ($followup->getFromDB(Cast::int($link['items_id'] ?? 0)) && Cast::int($followup->fields['is_private'] ?? 1) === 0) {
                     return false;
                 }
-                continue;
             }
-            if ($item instanceof CommonITILValidation) {
-                continue;
-            }
-            // The ITIL object itself or a solution: visible to everybody who sees the object
-            return false;
         }
 
-        return $found;
+        return true;
     }
 
     /**
@@ -281,23 +280,32 @@ final class DocumentHandler
         }
         self::$done[$key] = true;
         try {
-            return self::readAndAdd($parent, $document, $format, $path, $sha1sum);
+            $followup_id = self::readAndAdd($parent, $document, $format, $path, $sha1sum);
         } catch (Throwable $e) {
             // Not remembered: the next attempt (e.g. the console command) tries again
             unset(self::$done[$key]);
             ProcessedFiles::release((int) $reservation);
             throw $e;
         }
+        // Outside of the block above: once the followup exists, a failure here must not free the
+        // file again (the marker in the followup still tells that it was read, see ProcessedFiles)
+        try {
+            ProcessedFiles::remember($parent, $sha1sum, $document->getID(), $followup_id);
+        } catch (Throwable $e) {
+            Toolbox::logInFile(self::LOG, sprintf("Document %d: could not be remembered: %s\n", $document->getID(), $e->getMessage()));
+        }
+
+        return $followup_id > 0 ? self::ADDED : self::EMPTY;
     }
 
     /**
      * Reads the file and adds its text as a followup (part of processDocument()).
      *
-     * @return string ADDED or EMPTY
+     * @return int id of the followup; 0 if the file has no text
      *
      * @throws RuntimeException if the file cannot be read or the followup cannot be added
      */
-    private static function readAndAdd(CommonITILObject $parent, Document $document, string $format, string $path, string $sha1sum): string
+    private static function readAndAdd(CommonITILObject $parent, Document $document, string $format, string $path, string $sha1sum): int
     {
         $filename  = Cast::string($document->fields['filename']);
         $max_chars = Settings::getInt('max_chars', 1000, 1000000);
@@ -324,28 +332,38 @@ final class DocumentHandler
                 $format === 'pdf' ? "Document %d: no text layer (scanned PDF?)\n" : "Document %d: no text\n",
                 $document->getID(),
             ));
-            ProcessedFiles::remember($parent, $sha1sum, $document->getID(), 0);
-            return self::EMPTY;
+            return 0;
         }
 
         $followup = new ITILFollowup();
         $followup_id = $followup->add([
             'itemtype'      => $parent::class,
             'items_id'      => $parent->getID(),
-            'content'       => self::buildContent($filename, $format, $body, $shortened),
-            // Private as set, and always if the file is only on private followups or tasks
-            'is_private'    => (bool) Settings::get('is_private') || self::onlyPrivate($parent, $document) ? 1 : 0,
+            'content'       => self::buildContent($filename, $format, $body, $shortened, $sha1sum),
+            // Private as set, and always if the file is not visible to everybody who sees the object
+            'is_private'    => (bool) Settings::get('is_private') || self::mustBePrivate($parent, $document) ? 1 : 0,
             // No mail for this followup: the notification for the ticket or followup itself is enough.
             '_disablenotif' => true,
             // Do not reopen a solved or closed ticket because of the added text.
             '_no_reopen'    => true,
+            // The text is no answer of a technician: the ticket is not "taken into account" by it
+            // (else every ticket from the mail collector would count as taken into account at once)
+            '_do_not_compute_takeintoaccount' => true,
         ]);
         if ($followup_id === false) {
             throw new RuntimeException(sprintf('The followup for %s #%d could not be added.', $parent::class, $parent->getID()));
         }
-        ProcessedFiles::remember($parent, $sha1sum, $document->getID(), Cast::int($followup_id));
 
-        return self::ADDED;
+        return Cast::int($followup_id);
+    }
+
+    /**
+     * The ticket, change or problem an item belongs to (the item itself, or the object of a
+     * followup, task, solution or approval), or null.
+     */
+    public static function parentOf(string $itemtype, int $items_id): ?CommonITILObject
+    {
+        return self::getParent($itemtype, $items_id);
     }
 
     /**
@@ -380,15 +398,16 @@ final class DocumentHandler
 
     /**
      * HTML of the followup: a heading with the file name, then the text ($body: a <pre> block for
-     * PDFs, formatted HTML for Word and OpenDocument). ProcessedFiles recognises followups of
-     * earlier versions by the file name in the heading and their <pre> block.
+     * PDFs, formatted HTML for Word and OpenDocument). The heading carries the checksum of the file
+     * (attribute data-pdf2text), so that ProcessedFiles recognises the followups of the plugin in
+     * any language, also copied by a merge of tickets or after a new installation.
      */
-    private static function buildContent(string $filename, string $format, string $body, bool $shortened): string
+    private static function buildContent(string $filename, string $format, string $body, bool $shortened, string $sha1sum): string
     {
         $heading = $format === 'pdf'
             ? sprintf(__('Text of the PDF attachment "%s"', 'pdf2text'), $filename)
             : sprintf(__('Text of the attachment "%s"', 'pdf2text'), $filename);
-        $html = '<p><strong>' . htmlescape($heading) . '</strong></p>' . $body;
+        $html = '<p data-pdf2text="' . htmlescape($sha1sum) . '"><strong>' . htmlescape($heading) . '</strong></p>' . $body;
         if ($shortened) {
             $html .= '<p><em>' . htmlescape(__('The text was shortened. The complete text is in the attachment.', 'pdf2text')) . '</em></p>';
         }

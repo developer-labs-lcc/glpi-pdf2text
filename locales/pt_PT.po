@@ -137,3 +137,6 @@ msgstr[1] "%d ficheiros não puderam ser lidos (ver files/_log/pdf2text.log)"
 
 msgid "no attachments with text"
 msgstr "nenhum anexo com texto"
+
+msgid "The text of this file was added before."
+msgstr "O texto deste ficheiro já foi adicionado."

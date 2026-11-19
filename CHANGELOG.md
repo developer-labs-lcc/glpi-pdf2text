@@ -15,6 +15,35 @@ Fixes from the security review of Teclib before the publication in the plugin ca
 - Massive action: the summary is added once, at the last item, without changing GLPI's session
   messages directly.
 
+Further fixes from an audit of the whole plugin after the review:
+
+- Word/ODT files whose structure cost time or memory without text are bounded: a list item with
+  hundreds of thousands of paragraphs (time grew with the square), hundreds of thousands of
+  styles or numbering definitions (styles are read without XPath now), up to 20 000 blocks and
+  50 000 table cells per document.
+- PHP parser: its own per-stream limit for all filters; LZW and RunLength streams are counted
+  with their possible size before parsing; images are not kept in memory.
+- PHP 8.2: reading with pdftotext failed for every PDF (PHP before 8.3 reports the end of the
+  process differently); fixed.
+- Text followups no longer mark a ticket as taken into account (take-into-account times and SLAs
+  were wrong, tickets from the mail collector counted as taken into account at once).
+- Visibility: the text is public only if its file is on the object itself, a solution or a public
+  followup (files of public tasks gave a public text); it is made private when the source followup
+  or task is made private or the file is taken off the object.
+- Each text followup carries the checksum of its file (`data-pdf2text`): no duplicates after a
+  merge of tickets or a new installation; followups of 1.0.0 are recognised in every language.
+- Interrupted readings: a reservation older than 15 minutes is taken over (it no longer made the
+  file count as read without text); a failure after the followup was added no longer frees the
+  file again.
+- Button: not on closed objects; adding a text again only with the right to update all followups.
+- Massive action: rights checked per object as well.
+- Console command: invalid `--id` / `--limit` values are refused (they meant "all"); objects in
+  the trash are skipped.
+- pdftotext path: absolute path checked at run time too, and after shortening to the field length.
+- Release: archives are built only from committed files (`git archive`), `composer.lock` is
+  versioned; the plugin's autoloader no longer goes before GLPI's, and the mbstring polyfill is
+  not bundled any more.
+
 ## 1.0.0
 
 - First version: the text of PDF attachments is added as a followup to tickets, changes and problems

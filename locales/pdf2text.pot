@@ -137,3 +137,6 @@ msgstr[1] ""
 
 msgid "no attachments with text"
 msgstr ""
+
+msgid "The text of this file was added before."
+msgstr ""

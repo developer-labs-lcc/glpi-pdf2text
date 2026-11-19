@@ -10,14 +10,19 @@
     ],
     "require": {
         "php": ">=8.2",
+        "ext-mbstring": "*",
         "smalot/pdfparser": "^2.12"
+    },
+    "replace": {
+        "symfony/polyfill-mbstring": "*"
     },
     "config": {
         "optimize-autoloader": true,
         "platform": {
             "php": "8.2.99"
         },
-        "sort-packages": true
+        "sort-packages": true,
+        "prepend-autoloader": false
     },
     "autoload": {
         "psr-4": {
