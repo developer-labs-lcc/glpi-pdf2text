@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.3.0
+ * @version   1.3.1
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -416,8 +416,6 @@ $ma2 = new MassiveAction([
 ], [], 'process');
 // As after a reload of GLPI during the run: 4 followups were added on the pages before
 $ma2->results['pdf2text_totals'] = [DocumentHandler::ADDED => 4, DocumentHandler::EMPTY => 0, DocumentHandler::DONE => 0, DocumentHandler::FAILED => 0];
-$ma2->results['pdf2text_message'] = ['type' => INFO, 'text' => 'PDF2Text: 4 followups added'];
-$_SESSION['MESSAGE_AFTER_REDIRECT'][INFO] = ['PDF2Text: 4 followups added'];
 MassiveActions::processMassiveActionsForOneItemtype($ma2, new Ticket(), [$ma_ticket2->getID()]);
 check('summary counts the whole run, one message', ($_SESSION['MESSAGE_AFTER_REDIRECT'][INFO] ?? []) === ['PDF2Text: 5 followups added'], json_encode($_SESSION['MESSAGE_AFTER_REDIRECT']) ?: '');
 $_SESSION['MESSAGE_AFTER_REDIRECT'] = [];

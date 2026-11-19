@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.4.0
+ * @version   1.4.1
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -302,15 +302,21 @@ final class DocumentHandler
         $filename  = Cast::string($document->fields['filename']);
         $max_chars = Settings::getInt('max_chars', 1000, 1000000);
         if ($format === 'pdf') {
-            $text = (new PdfTextExtractor(Cast::string(Settings::get('pdftotext_path'))))->extract($path);
+            $pdf  = new PdfTextExtractor(Cast::string(Settings::get('pdftotext_path')));
+            $text = $pdf->extract($path, $max_chars);
             // PDF: the text in a <pre> block, so that the columns of pdftotext stay aligned
             [$text, $shortened] = PdfTextExtractor::truncate($text, $max_chars);
+            $shortened = $shortened || $pdf->wasCut();
             $body = '<pre>' . htmlescape($text) . '</pre>';
         } else {
             // Word, OpenDocument: formatted (headings, paragraphs, lists, tables), lines wrap
-            $blocks = (new OfficeTextExtractor())->extractBlocks($path, $format);
+            // The maximum length also bounds the reading itself (against small files that would
+            // expand to a huge text, see OfficeTextExtractor::take())
+            $office = new OfficeTextExtractor();
+            $blocks = $office->extractBlocks($path, $format, $max_chars);
             $text   = OfficeTextExtractor::toText($blocks);
             [$body, $shortened] = OfficeTextExtractor::toHtml($blocks, $max_chars);
+            $shortened = $shortened || $office->wasCut();
         }
         if ($text === '') {
             // Scanned PDF without text layer, document with images only: nothing to copy.

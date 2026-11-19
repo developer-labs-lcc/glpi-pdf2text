@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.1
+ * @version   1.1.2
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -53,9 +53,10 @@ final class ConfigController extends AbstractController
             foreach ([...array_keys(Settings::ITEMTYPES), ...array_keys(Settings::FILETYPES)] as $key) {
                 $values[$key] = $request->request->getBoolean($key) ? 1 : 0;
             }
-            // Only an absolute path is accepted; the program is started without a shell.
+            // Only an absolute path to a program named pdftotext is accepted (else: search the usual
+            // places); the program is started without a shell.
             $path = trim((string) $request->request->get('pdftotext_path', ''));
-            $values['pdftotext_path'] = str_starts_with($path, '/') ? mb_substr($path, 0, 255) : '';
+            $values['pdftotext_path'] = str_starts_with($path, '/') && PdfTextExtractor::isPdftotextPath($path) ? mb_substr($path, 0, 255) : '';
 
             Settings::set($values);
             Session::addMessageAfterRedirect(__('The configuration was saved.', 'pdf2text'));

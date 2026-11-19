@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.0
+ * @version   1.2.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -18,8 +18,12 @@ use Smalot\PdfParser\Parser;
 use Throwable;
 
 use function Safe\fclose;
+use function Safe\file_get_contents;
 use function Safe\filesize;
+use function Safe\inflate_add;
+use function Safe\inflate_init;
 use function Safe\ini_get;
+use function Safe\preg_match;
 use function Safe\preg_replace;
 use function Safe\proc_close;
 use function Safe\stream_get_contents;
@@ -49,6 +53,9 @@ final class PdfTextExtractor
     /** Larger files are not given to the PHP parser, it keeps the whole file in memory. */
     private const PHP_PARSER_MAX_BYTES = 20 * 1024 * 1024;
 
+    /** Unpacked size of the compressed streams of a PDF up to which the PHP parser is used. */
+    private const PHP_PARSER_MAX_UNPACKED = 32 * 1024 * 1024;
+
     /** Memory the PHP parser needs, as a multiple of the size of the PDF (rough, on the safe side). */
     private const PHP_PARSER_MEMORY_FACTOR = 15;
 
@@ -57,20 +64,54 @@ final class PdfTextExtractor
      */
     public function __construct(private readonly string $pdftotext_path = '') {}
 
+    /** Budget in bytes for the output of pdftotext when no maximum length is given. */
+    private const DEFAULT_BUDGET = 4 * 1024 * 1024;
+
+    /** At most this much of the error output of pdftotext is kept (for the log). */
+    private const MAX_ERROR_BYTES = 65536;
+
+    /** Whether the last text was cut because it got longer than the maximum length. */
+    private bool $cut = false;
+
+    /**
+     * Whether a path names the pdftotext program: its file name must be "pdftotext" (or
+     * "pdftotext.exe"), so that a mistyped or unexpected path does not run another program for
+     * every attachment.
+     */
+    public static function isPdftotextPath(string $path): bool
+    {
+        // ^pdftotext(\.exe)?$ = exactly "pdftotext", optionally with ".exe"; i = any case
+        return preg_match('/^pdftotext(\.exe)?$/i', basename($path)) === 1;
+    }
+
+    /**
+     * Whether the last text returned by extract() was cut at the maximum length (pdftotext was
+     * stopped then, its output is not read to the end).
+     */
+    public function wasCut(): bool
+    {
+        return $this->cut;
+    }
+
     /**
      * Returns the normalised text of the PDF, or an empty string if it has no text layer.
+     * The output of pdftotext is read only up to $max_chars characters (plus a margin; 0 = about
+     * 4 MB): a small, highly compressed PDF can produce a huge text.
      *
      * @throws RuntimeException if the file cannot be read by any method
      */
-    public function extract(string $file): string
+    public function extract(string $file, int $max_chars = 0): string
     {
         if (!is_file($file) || !is_readable($file)) {
             throw new RuntimeException(sprintf('File "%s" is not readable.', $file));
         }
+        $this->cut = false;
 
         $binary = $this->findPdftotext();
         if ($binary !== null) {
-            return self::normalise($this->runPdftotext($binary, $file));
+            // UTF-8: up to 4 bytes per character; 1 KB margin, so that the shortening later sees there was more
+            $budget = $max_chars > 0 ? $max_chars * 4 + 1024 : self::DEFAULT_BUDGET;
+            return self::normalise($this->runPdftotext($binary, $file, $budget));
         }
 
         return self::normalise($this->runPhpParser($file));
@@ -90,7 +131,7 @@ final class PdfTextExtractor
     {
         $candidates = $this->pdftotext_path !== '' ? [$this->pdftotext_path] : self::PDFTOTEXT_CANDIDATES;
         foreach ($candidates as $candidate) {
-            if (is_file($candidate) && is_executable($candidate)) {
+            if (self::isPdftotextPath($candidate) && is_file($candidate) && is_executable($candidate)) {
                 return $candidate;
             }
         }
@@ -98,7 +139,7 @@ final class PdfTextExtractor
         return null;
     }
 
-    private function runPdftotext(string $binary, string $file): string
+    private function runPdftotext(string $binary, string $file, int $budget): string
     {
         // Array form of proc_open: no shell is involved, so file names need no escaping.
         // -layout keeps columns and tables readable, "-" writes the text to stdout.
@@ -123,8 +164,19 @@ final class PdfTextExtractor
         $errors   = '';
         $deadline = microtime(true) + self::TIMEOUT;
         while (true) {
-            $output .= stream_get_contents($stdout);
-            $errors .= stream_get_contents($stderr);
+            // At most the budget (+1 byte, to notice that there is more)
+            $output .= stream_get_contents($stdout, $budget + 1 - strlen($output));
+            $errors .= stream_get_contents($stderr, max(0, self::MAX_ERROR_BYTES - strlen($errors)));
+            if (strlen($output) > $budget) {
+                // Enough text: pdftotext is stopped, the rest is not needed
+                proc_terminate($process);
+                fclose($stdout);
+                fclose($stderr);
+                proc_close($process);
+                $this->cut = true;
+                // mb_strcut: at most $budget bytes, without splitting a character
+                return mb_strcut($output, 0, $budget, 'UTF-8');
+            }
             $status = proc_get_status($process);
             if (!$status['running']) {
                 break;
@@ -139,8 +191,12 @@ final class PdfTextExtractor
             usleep(20000);
         }
         // Collect what was written between the last read and the end of the process.
-        $output .= stream_get_contents($stdout);
-        $errors .= stream_get_contents($stderr);
+        $output .= stream_get_contents($stdout, $budget + 1 - strlen($output));
+        $errors .= stream_get_contents($stderr, max(0, self::MAX_ERROR_BYTES - strlen($errors)));
+        if (strlen($output) > $budget) {
+            $this->cut = true;
+            $output    = mb_strcut($output, 0, $budget, 'UTF-8');
+        }
         fclose($stdout);
         fclose($stderr);
         proc_close($process);
@@ -159,8 +215,14 @@ final class PdfTextExtractor
             throw new RuntimeException('The PDF is too large for the PHP parser; install pdftotext (poppler-utils).');
         }
 
-        // The parser keeps the file and its objects in memory, many times the size of the file
-        self::ensureMemory(filesize($file) * self::PHP_PARSER_MEMORY_FACTOR);
+        // The parser keeps the file and its objects in memory, many times the size of the file,
+        // and unpacks all compressed streams: their unpacked size counts as well (a small PDF can
+        // unpack to hundreds of megabytes)
+        $unpacked = self::unpackedSize($file, self::PHP_PARSER_MAX_UNPACKED);
+        if ($unpacked > self::PHP_PARSER_MAX_UNPACKED) {
+            throw new RuntimeException(sprintf('The PDF unpacks to more than %d MB, too much for the PHP parser; install pdftotext (poppler-utils).', self::PHP_PARSER_MAX_UNPACKED / 1048576));
+        }
+        self::ensureMemory((filesize($file) + $unpacked) * self::PHP_PARSER_MEMORY_FACTOR);
         try {
             return (new Parser())->parseFile($file)->getText();
         } catch (Throwable $e) {
@@ -182,6 +244,67 @@ final class PdfTextExtractor
         if ($limit > 0 && memory_get_usage(true) + $bytes > $limit) {
             throw new RuntimeException(sprintf('Not enough memory to read the file (about %d MB needed, memory_limit %s).', (int) ceil($bytes / 1048576), (string) ini_get('memory_limit')));
         }
+    }
+
+    /**
+     * Size of the compressed streams of a PDF once unpacked (zlib / FlateDecode, by far the most
+     * common filter), counted without keeping the data: each stream is unpacked in small pieces
+     * and only the length of each piece is added up. Counting stops above $limit. Streams that
+     * are not zlib data (images, other filters) count with their packed size.
+     */
+    public static function unpackedSize(string $file, int $limit): int
+    {
+        $data  = file_get_contents($file);
+        $total = 0;
+        $pos   = 0;
+        // Each stream starts after the keyword "stream" and a line break (CR LF or LF) and ends
+        // before "endstream"
+        while (($start = strpos($data, 'stream', $pos)) !== false) {
+            $begin = $start + 6;
+            if (substr($data, $begin, 2) === "\r\n") {
+                $begin += 2;
+            } elseif (($data[$begin] ?? '') === "\n") {
+                $begin++;
+            } else {
+                // "stream" inside "endstream" or other text: go on after it
+                $pos = $begin;
+                continue;
+            }
+            $end = strpos($data, 'endstream', $begin);
+            if ($end === false) {
+                break;
+            }
+            $total += self::inflatedLength(substr($data, $begin, $end - $begin), $limit - $total);
+            if ($total > $limit) {
+                return $total;
+            }
+            $pos = $end + 9;
+        }
+
+        return $total;
+    }
+
+    /**
+     * Length of zlib data once unpacked, counted in pieces of 1 KB of input (one piece can unpack
+     * to at most about 1 MB), stopping above $limit; the packed length if it is no zlib data.
+     */
+    private static function inflatedLength(string $packed, int $limit): int
+    {
+        $length = 0;
+        try {
+            $context = inflate_init(ZLIB_ENCODING_DEFLATE);
+            foreach (str_split($packed, 1024) as $piece) {
+                $length += strlen(inflate_add($context, $piece, ZLIB_SYNC_FLUSH));
+                if ($length > $limit) {
+                    break;
+                }
+            }
+        } catch (Throwable) {
+            // No zlib data (another filter, an image): it counts with its packed size
+            return max($length, strlen($packed));
+        }
+
+        return $length;
     }
 
     /**

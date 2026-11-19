@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.2
+ * @version   1.0.3
  * @created   2026-10-23
  * @changed   2026-11-15
  */
@@ -54,6 +54,13 @@ check('values saved', Settings::get('on_change') == 0 && Settings::get('is_priva
 check('file types saved', Settings::get('type_docx') == 0 && Settings::get('type_odt') == 1 && Settings::get('type_pdf') == 1);
 check('maximum length kept within limits', (int) Settings::get('max_chars') === 1000);
 check('relative pdftotext path rejected', Settings::get('pdftotext_path') === '');
+// Only a program named pdftotext: another program would run for every attachment
+$controller->config(Request::create('/plugins/pdf2text/config', 'POST', ['pdftotext_path' => '/bin/sh']));
+Settings::reset();
+check('path to another program rejected', Settings::get('pdftotext_path') === '');
+$controller->config(Request::create('/plugins/pdf2text/config', 'POST', ['pdftotext_path' => '/opt/poppler/bin/pdftotext']));
+Settings::reset();
+check('absolute path to pdftotext kept', Settings::get('pdftotext_path') === '/opt/poppler/bin/pdftotext');
 
 section('access');
 $rights = $_SESSION['glpiactiveprofile']['config'];

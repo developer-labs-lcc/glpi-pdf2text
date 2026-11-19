@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   2.1.0
+ * @version   2.2.0
  * @created   2026-11-15
  * @changed   2026-11-15
  */
@@ -67,6 +67,12 @@ final class OfficeTextExtractor
     private const NS_TABLE  = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
     private const NS_STYLE  = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
 
+    /** Budget in bytes when no maximum length is given (see extractBlocks()). */
+    private const DEFAULT_BUDGET = 4 * 1024 * 1024;
+
+    /** Bytes per character for the budget: UTF-8 needs up to 4 bytes per character. */
+    private const BYTES_PER_CHAR = 4;
+
     /** Deepest list level that is kept (deeper items are shown on this level). */
     private const MAX_LIST_DEPTH = 9;
 
@@ -95,16 +101,36 @@ final class OfficeTextExtractor
     private array $odt_list_xml_ids = [];
 
     /**
+     * Bytes of text the reader may still produce (see take()). The budget is checked while the
+     * text is built: an ODT can say "1000 spaces" in a few bytes (text:s), so a small file could
+     * otherwise grow to gigabytes in memory before any limit applies.
+     */
+    private int $left = self::DEFAULT_BUDGET;
+
+    /** Whether the budget ran out (the text is incomplete). */
+    private bool $cut = false;
+
+    /**
      * Returns the plain text of the document (see toText()), or an empty string if it contains
      * no text (e.g. only images).
      *
-     * @param string $format self::DOCX or self::ODT
+     * @param string $format    self::DOCX or self::ODT
+     * @param int    $max_chars see extractBlocks()
      *
      * @throws RuntimeException if the file is not a readable document of that format
      */
-    public function extract(string $file, string $format): string
+    public function extract(string $file, string $format, int $max_chars = 0): string
     {
-        return self::toText($this->extractBlocks($file, $format));
+        return self::toText($this->extractBlocks($file, $format, $max_chars));
+    }
+
+    /**
+     * Whether the last reading stopped because the text got longer than the maximum length (the
+     * blocks then hold only the beginning of the document).
+     */
+    public function wasCut(): bool
+    {
+        return $this->cut;
     }
 
     /**
@@ -116,12 +142,20 @@ final class OfficeTextExtractor
      * - ['type' => 'table', 'rows' => [[cell text, …], …]]
      * Texts may contain line breaks ("\n") and tabs ("\t"). Empty paragraphs are left out.
      *
+     * Reading stops once the text gets longer than $max_chars characters (plus a margin); 0 = a
+     * default of about 4 MB. wasCut() then says that the document was not read to its end.
+     *
      * @return list<array<string, mixed>>
      *
      * @throws RuntimeException if the file is not a readable document of that format
      */
-    public function extractBlocks(string $file, string $format): array
+    public function extractBlocks(string $file, string $format, int $max_chars = 0): array
     {
+        // Margin of 1 KB: the text is shortened to $max_chars later (toHtml(), toText()), the
+        // margin lets that see that there was more
+        $this->left = $max_chars > 0 ? $max_chars * self::BYTES_PER_CHAR + 1024 : self::DEFAULT_BUDGET;
+        $this->cut  = false;
+
         if (!isset(self::CONTENT_FILE[$format])) {
             throw new RuntimeException(sprintf('Unknown format "%s".', $format));
         }
@@ -511,6 +545,11 @@ final class OfficeTextExtractor
     private function walkBlocks(DOMNode $parent, array &$blocks, int $depth, ?string $list_style): void
     {
         foreach ($parent->childNodes as $node) {
+            // Budget spent: the rest of the document is not read
+            if ($this->left <= 0) {
+                $this->cut = true;
+                return;
+            }
             if (!$node instanceof DOMElement) {
                 continue;
             }
@@ -804,13 +843,17 @@ final class OfficeTextExtractor
     {
         $out = '';
         foreach ($node->childNodes as $child) {
+            if ($this->left <= 0) {
+                $this->cut = true;
+                break;
+            }
             if ($child->nodeType === XML_TEXT_NODE || $child->nodeType === XML_CDATA_SECTION_NODE) {
                 if ($this->format === self::ODT) {
                     // In ODF, runs of spaces, tabs and line breaks in the XML count as one space
                     // (real ones are text:s, text:tab, text:line-break). [ \t\r\n]+ = one or more
-                    $out .= preg_replace('/[ \t\r\n]+/', ' ', (string) $child->nodeValue);
+                    $out .= $this->take(preg_replace('/[ \t\r\n]+/', ' ', (string) $child->nodeValue));
                 } elseif (self::isDocxText($child)) {
-                    $out .= (string) $child->nodeValue;
+                    $out .= $this->take((string) $child->nodeValue);
                 }
                 continue;
             }
@@ -839,15 +882,15 @@ final class OfficeTextExtractor
             switch ($element->localName) {
                 case 'tab':
                 case 'ptab':
-                    return "\t";
+                    return $this->take("\t");
                 case 'br':
                 case 'cr':
-                    return "\n";
+                    return $this->take("\n");
                 case 'noBreakHyphen':
-                    return '-';
+                    return $this->take('-');
                 case 'p':
                     // Paragraph of a text box inside the paragraph: on a new line
-                    return "\n" . $this->inlineText($element);
+                    return $this->take("\n") . $this->inlineText($element);
                 case 'del':
                 case 'moveFrom':
                 case 'delText':
@@ -873,17 +916,18 @@ final class OfficeTextExtractor
         if ($ns === self::NS_TEXT) {
             switch ($name) {
                 case 's':
-                    // text:c = number of spaces (default 1), at most 1000 against absurd values
-                    $count = (int) ($element->getAttributeNS(self::NS_TEXT, 'c') ?: 1);
-                    return str_repeat(' ', max(1, min(1000, $count)));
+                    // text:c = number of spaces (default 1), at most 1000 per element and never
+                    // more than the budget left (many such elements would multiply the 1000)
+                    $count = max(1, min(1000, (int) ($element->getAttributeNS(self::NS_TEXT, 'c') ?: 1)));
+                    return $this->take(str_repeat(' ', min($count, max(0, $this->left))));
                 case 'tab':
-                    return "\t";
+                    return $this->take("\t");
                 case 'line-break':
-                    return "\n";
+                    return $this->take("\n");
                 case 'p':
                 case 'h':
                     // Paragraph of a text frame inside the paragraph: on a new line
-                    return "\n" . $this->inlineText($element);
+                    return $this->take("\n") . $this->inlineText($element);
                 case 'note':
                 case 'tracked-changes':
                 case 'change':
@@ -905,10 +949,30 @@ final class OfficeTextExtractor
      */
     private static function clean(string $text): string
     {
-        // "[ \t]*\n[ \t]*" = a line break with spaces or tabs around it; "\n{2,}" = empty lines
-        $text = preg_replace('/[ \t]*\n[ \t]*/', "\n", $text);
-        $text = preg_replace('/\n{2,}/', "\n", $text);
+        // Line by line (no regular expression: a pattern around line breaks would need time
+        // growing with the square of a long run of spaces)
+        $lines = array_map(static fn(string $line) => trim($line, " \t"), explode("\n", $text));
 
-        return trim($text, " \t\n");
+        return implode("\n", array_filter($lines, static fn(string $line) => $line !== ''));
+    }
+
+    /**
+     * Counts a piece of text against the budget and returns it, or only its beginning (cut at a
+     * whole UTF-8 character) when the budget does not reach that far.
+     */
+    private function take(string $piece): string
+    {
+        if ($this->left <= 0) {
+            $this->cut = $this->cut || $piece !== '';
+            return '';
+        }
+        if (strlen($piece) > $this->left) {
+            // mb_strcut: at most $this->left bytes, without splitting a character
+            $piece     = mb_strcut($piece, 0, $this->left, 'UTF-8');
+            $this->cut = true;
+        }
+        $this->left -= strlen($piece);
+
+        return $piece;
     }
 }

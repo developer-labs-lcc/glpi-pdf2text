@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.1.0
+ * @version   1.2.0
  * @created   2026-11-15
  * @changed   2026-11-15
  */
@@ -19,6 +19,7 @@ use Config;
 use DBConnection;
 use DBmysql;
 use ITILFollowup;
+use Throwable;
 
 /**
  * Remembers which files were already read for which ticket, change or problem, so that the
@@ -114,10 +115,8 @@ final class ProcessedFiles
     /**
      * Reserves the file for the ITIL object before it is read, so that two processes reading the
      * same file at the same time (e.g. the mail collector and a click on the button) do not both
-     * add a followup: the row is added only if there is none for this file yet, in one step of the
-     * database (the unique key decides). "ON DUPLICATE KEY UPDATE id = id" changes nothing on an
-     * existing row (0 affected rows); unlike INSERT IGNORE it causes no SQL warning, which GLPI
-     * would log (and whose check resets the number of affected rows).
+     * add a followup. The unique key of the table decides: the row is added with GLPI's query
+     * builder; if a row for this file exists already, the database refuses the insert.
      *
      * @return int|null id of the new row; null if a row exists already (the file is read or
      *                  being read); 0 if the table does not exist yet (update not run)
@@ -130,30 +129,22 @@ final class ProcessedFiles
         if (!$DB->tableExists(self::TABLE)) {
             return 0;
         }
-        $DB->doQuery(sprintf(
-            'INSERT INTO %s (%s, %s, %s, %s, %s, %s) VALUES (%s, %d, %s, %d, 0, %s) ON DUPLICATE KEY UPDATE %s = %s',
-            DBmysql::quoteName(self::TABLE),
-            DBmysql::quoteName('itemtype'),
-            DBmysql::quoteName('items_id'),
-            DBmysql::quoteName('sha1sum'),
-            DBmysql::quoteName('documents_id'),
-            DBmysql::quoteName('itilfollowups_id'),
-            DBmysql::quoteName('date_creation'),
-            Cast::string(DBmysql::quoteValue($parent::class)),
-            $parent->getID(),
-            Cast::string(DBmysql::quoteValue($sha1sum)),
-            $documents_id,
-            Cast::string(DBmysql::quoteValue(date('Y-m-d H:i:s'))),
-            DBmysql::quoteName('id'),
-            DBmysql::quoteName('id'),
-        ));
+        $key = ['itemtype' => $parent::class, 'items_id' => $parent->getID(), 'sha1sum' => $sha1sum];
+        try {
+            $DB->insert(self::TABLE, $key + [
+                'documents_id'     => $documents_id,
+                'itilfollowups_id' => 0,
+                'date_creation'    => date('Y-m-d H:i:s'),
+            ]);
+        } catch (Throwable $e) {
+            // Duplicate key: another process has this file already (any other error is passed on)
+            if (count($DB->request(['SELECT' => ['id'], 'FROM' => self::TABLE, 'WHERE' => $key, 'LIMIT' => 1])) > 0) {
+                return null;
+            }
+            throw $e;
+        }
 
-        // getAffectedRows() since GLPI 12 (affectedRows() is deprecated there), affectedRows() in
-        // GLPI 11: called by name, so that the code works with both
-        $method   = method_exists($DB, 'getAffectedRows') ? 'getAffectedRows' : 'affectedRows';
-        $affected = Cast::int($DB->$method());
-
-        return $affected > 0 ? Cast::int($DB->insertId()) : null;
+        return Cast::int($DB->insertId());
     }
 
     /**

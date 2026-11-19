@@ -6,7 +6,7 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.2.0
+ * @version   1.3.0
  * @created   2026-10-22
  * @changed   2026-11-15
  */
@@ -143,6 +143,70 @@ try {
 $hostname = is_readable('/etc/hostname') ? trim((string) file_get_contents('/etc/hostname')) : '';
 $check('external entities are not loaded (XXE)', $hostname === '' || !str_contains($xxe_text, $hostname), $xxe_text);
 unlink($xxe);
+
+echo "== files that expand when read\n";
+$bomb_dir = sys_get_temp_dir() . '/pdf2text-test-' . bin2hex(random_bytes(4));
+mkdir($bomb_dir);
+// ODT of a few KB whose text:s elements stand for 150 million spaces
+$odt = new ZipArchive();
+$odt->open("$bomb_dir/spaces.odt", ZipArchive::CREATE);
+$odt->addFromString('content.xml', '<?xml version="1.0" encoding="UTF-8"?><office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text>'
+    . str_repeat('<text:p>x' . str_repeat('<text:s text:c="1000"/>', 50) . 'y</text:p>', 3000) . '</office:text></office:body></office:document-content>');
+$odt->close();
+$before = memory_get_usage();
+$reader = new OfficeTextExtractor();
+$blocks = $reader->extractBlocks("$bomb_dir/spaces.odt", OfficeTextExtractor::ODT, 20000);
+$used   = memory_get_peak_usage() - $before;
+$check('ODT with text:s for 150 million spaces: reading stops at the maximum length', $reader->wasCut() && strlen(OfficeTextExtractor::toText($blocks)) < 200000, (string) strlen(OfficeTextExtractor::toText($blocks)));
+$check('… without using much memory', $used < 64 * 1048576, round($used / 1048576) . ' MB');
+[$html, $short] = OfficeTextExtractor::toHtml($blocks, 20000);
+$check('… and the followup says it was shortened', $short);
+$normal = new OfficeTextExtractor();
+$normal->extract($fixtures . 'change.odt', 'odt', 20000);
+$check('a normal document is not cut', !$normal->wasCut());
+
+// PDF of about 200 KB whose page content unpacks to about 50 MB
+// (packed piece by piece, so that the test itself never holds the 50 MB)
+$deflate = deflate_init(ZLIB_ENCODING_DEFLATE, ['level' => 9]);
+$packed  = (string) deflate_add($deflate, "BT /F1 8 Tf 9 TL 20 800 Td\n", ZLIB_NO_FLUSH);
+$chunk   = str_repeat('(' . str_repeat('A', 200) . ") Tj T*\n", 1000);
+for ($i = 0; $i < 250; $i++) {
+    $packed .= (string) deflate_add($deflate, $chunk, ZLIB_NO_FLUSH);
+}
+$packed .= (string) deflate_add($deflate, "ET\n", ZLIB_FINISH);
+$objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    '<< /Length ' . strlen($packed) . " /Filter /FlateDecode >>\nstream\n" . $packed . "\nendstream", '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+$pdf = "%PDF-1.4\n";
+$offsets = [];
+foreach ($objects as $i => $object) {
+    $offsets[] = strlen($pdf);
+    $pdf .= ($i + 1) . " 0 obj\n$object\nendobj\n";
+}
+$xref = strlen($pdf);
+$pdf .= "xref\n0 6\n0000000000 65535 f \n" . implode('', array_map(static fn(int $o) => sprintf("%010d 00000 n \n", $o), $offsets));
+$pdf .= "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n$xref\n%%EOF\n";
+file_put_contents("$bomb_dir/unpacks.pdf", $pdf);
+$check('unpacked size of the PDF counted (stops above the limit)', PdfTextExtractor::unpackedSize("$bomb_dir/unpacks.pdf", 1048576) > 1048576);
+$check('normal PDF: small unpacked size', PdfTextExtractor::unpackedSize($fixtures . 'change.pdf', 1048576) < 1048576);
+try {
+    (new PdfTextExtractor('/nonexistent/pdftotext'))->extract("$bomb_dir/unpacks.pdf", 20000);
+    $check('PHP parser: PDF that unpacks to 50 MB refused (no fatal error)', false);
+} catch (RuntimeException $e) {
+    $check('PHP parser: PDF that unpacks to 50 MB refused (no fatal error)', str_contains($e->getMessage(), 'unpacks'), $e->getMessage());
+}
+if (isset($methods['pdftotext'])) {
+    $limited = new PdfTextExtractor();
+    $text    = $limited->extract("$bomb_dir/unpacks.pdf", 100);
+    $check('pdftotext: output read only up to the maximum length', $limited->wasCut() && strlen($text) <= 100 * 4 + 1024, (string) strlen($text));
+}
+array_map('unlink', glob("$bomb_dir/*") ?: []);
+rmdir($bomb_dir);
+
+echo "== pdftotext path\n";
+$check('program named pdftotext accepted', PdfTextExtractor::isPdftotextPath('/usr/bin/pdftotext') && PdfTextExtractor::isPdftotextPath('C:/poppler/pdftotext.exe'));
+$check('other programs refused', !PdfTextExtractor::isPdftotextPath('/bin/sh') && !PdfTextExtractor::isPdftotextPath('/usr/bin/pdftotext-wrapper.sh'));
+$check('configured path to another program is not run', (new PdfTextExtractor('/bin/sh'))->getMethod() === 'smalot/pdfparser (PHP)');
 
 echo "== helpers\n";
 try {

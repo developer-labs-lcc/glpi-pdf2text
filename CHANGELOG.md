@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.1
+
+Fixes from the security review of Teclib before the publication in the plugin catalog (issue #1):
+
+- Word and OpenDocument: the maximum length is checked while the text is read (a running budget),
+  not afterwards. A small ODT could expand to hundreds of megabytes (`text:s` stands for up to 1000
+  spaces) and stop PHP, e.g. in the mail collector. The cleaning of the text no longer uses a
+  regular expression whose time grew with the square of a run of spaces.
+- PDF with the PHP parser: PDFs whose compressed parts unpack to more than 32 MB are refused
+  instead of stopping PHP; `pdftotext` is stopped once its text is longer than the maximum length.
+- The path of pdftotext is accepted only if the program is named `pdftotext`.
+- The reservation of a file against two processes uses GLPI's query builder instead of SQL text.
+- Massive action: the summary is added once, at the last item, without changing GLPI's session
+  messages directly.
+
 ## 1.0.0
 
 - First version: the text of PDF attachments is added as a followup to tickets, changes and problems
