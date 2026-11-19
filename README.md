@@ -149,15 +149,19 @@ together with the settings.
 | Read these file types | PDF, Word (DOCX), OpenDocument text (ODT) | File types that are read |
 | Private followup | on | Followup visible to technicians only |
 | Maximum length of the text | 20000 | Longer texts are shortened; the full text stays in the file |
-| Path of pdftotext | empty | Empty = search `/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin` |
+| Path of pdftotext | empty | Empty = search `/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin`. Only an absolute path to a program named `pdftotext` is accepted |
 
 The page also shows which method (pdftotext or PHP parser) is used for PDFs, and how to add the
 text of files attached before.
 
 ## Limits
 
-- The PHP parser only reads PDFs up to 20 MB; larger ones need `pdftotext`.
-- `pdftotext` is stopped after 30 seconds.
+- The PHP parser only reads PDFs up to 20 MB, and only if their compressed parts unpack to at
+  most 32 MB (a small PDF can unpack to hundreds of megabytes); others need `pdftotext`.
+- `pdftotext` is stopped after 30 seconds, and as soon as its text is longer than the maximum
+  length.
+- Word and OpenDocument files are read only up to the maximum length: an ODT can say "1000
+  spaces" in a few bytes, so the length is checked while reading, not afterwards.
 - A file that would need more memory than PHP's `memory_limit` leaves (PHP parser, Word and
   OpenDocument) is skipped and logged instead of stopping PHP – e.g. in the mail collector.
 - Word and OpenDocument files whose text is larger than 20 MB unpacked are not read.
