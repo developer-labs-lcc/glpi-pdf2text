@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Japanese translation (`ja_JP`), contributed by INOUE Daisuke (pull request #2), with the terms of
+  GLPI's own Japanese translation (フォロー for followups, 非公開 for private); catalog
+  description in Japanese.
+
 ## 1.0.1
 
 Fixes from the security review of Teclib before the publication in the plugin catalog (issue #1):

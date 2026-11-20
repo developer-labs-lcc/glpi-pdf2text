@@ -1,0 +1,143 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: GLPI plugin pdf2text 1.0.0\n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: ja_JP\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: Poedit 3.10\n"
+
+msgid "Run \"composer install --no-dev\" in the plugin directory first."
+msgstr "最初にプラグイン ディレクトリー内で「composer install --no-dev」を実行してください。"
+
+#, php-format
+msgid "Text of the PDF attachment \"%s\""
+msgstr "「%s」PDF 添付ファイルの本文"
+
+msgid "The text was shortened. The complete text is in the attachment."
+msgstr "本文を短縮しました。完全な本文は添付ファイルにあります。"
+
+msgid "The configuration was saved."
+msgstr "構成を保存しました。"
+
+msgid "PDF2Text"
+msgstr "PDF2Text"
+
+msgid "PDF2Text – configuration"
+msgstr "PDF2Text ― 構成"
+
+msgid "Add the text to"
+msgstr "テキストの追加先"
+
+msgid "Private followup (only visible to technicians)"
+msgstr "非公開のフォロー ( 担当技術者にのみ表示 )"
+
+msgid "Maximum length of the text (characters)"
+msgstr "本文の最大文字数"
+
+msgid "Path of pdftotext (optional)"
+msgstr "pdftotext のパス ( 任意 )"
+
+msgid "Leave empty to search the usual places. Without pdftotext (package poppler-utils), the built-in PHP parser is used; pdftotext keeps tables and columns better."
+msgstr "空のままだと一般的な場所を探します。pdftotext ( poppler-utils パッケージ ) がなければ、内蔵の PHP パーサーを利用します。pdftotext はテーブルや段組みをよりよく維持します。"
+
+msgid "Method in use"
+msgstr "利用する方式"
+
+msgid "When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, change or problem (by mail, form or API), its text is added as a followup, so it can be read and searched without opening the file. A file attached again to the same ticket adds no second followup. Scanned PDFs without a text layer are skipped."
+msgstr "PDF、Word (docx) または OpenDocument (odt) ファイルをチケット、変更または問題に ( メール、フォームまたは API 経由で ) 添付すると、その本文をフォローとして追加します。ファイルを開かずに読んだり検索したりできるようになります。同じチケットに再度ファイルを添付しても、2つ目のフォローを追加することはありません。スキャンで作成した PDF のうち、テキストレイヤーのないものはスキップします。"
+
+msgid "Read these file types"
+msgstr "読み取るファイル形式"
+
+msgid "Word (DOCX)"
+msgstr "Word (docx)"
+
+msgid "OpenDocument text (ODT)"
+msgstr "OpenDocument テキスト (odt)"
+
+msgid "Word and OpenDocument files need the PHP extensions zip and dom, which are missing on this server."
+msgstr "Word と OpenDocument のファイルには zip と dom の PHP 拡張が必要ですが、このサーバーにはありません。"
+
+msgid "Files attached before"
+msgstr "以前に添付したファイル"
+
+msgid "Files attached before the plugin was enabled are not read automatically. To add their text, choose the tickets, changes or problems in their list and use the action \"Copy the text of the attachments (PDF2Text)\", or run on the server:"
+msgstr "プラグインを有効にする前に添付されていたファイルは、自動で読み取りません。以前に添付していたファイルのテキストを追加するには、チケット、変更または問題をリスト上で選択して「添付ファイルの本文を追加 ( PDF2Text )」の操作をおこなうか、サーバーで以下のコマンドを実行します :"
+
+msgid "Files read before are skipped, so this can be repeated at any time."
+msgstr "以前に読み取ったファイルはスキップするため、この操作はいつでも繰り返せます。"
+
+#, php-format
+msgid "Text of the attachment \"%s\""
+msgstr "添付ファイル「%s」の本文"
+
+msgid "Copy the text of the attachments (PDF2Text)"
+msgstr "添付ファイルの本文を追加 ( PDF2Text )"
+
+msgid "The text of PDF, Word and OpenDocument attachments that were not read yet is added as a followup."
+msgstr "まだ読み取っていない PDF、Word、OpenDocument の添付ファイルの本文をフォローとして追加します。"
+
+msgid "Copy the text into a followup (PDF2Text)"
+msgstr "本文をフォローとして追加 ( PDF2Text )"
+
+msgid "Add again"
+msgstr "再追加"
+
+msgid "The request failed. Please reload the page and try again."
+msgstr "失敗しました。ページを再読み込みして、やり直してください。"
+
+msgid "PDF2Text is switched off for this type."
+msgstr "この種類のアイテムでは PDF2Text は無効になっています。"
+
+msgid "You may not add a followup here."
+msgstr "ここにフォローを追加する権限がありません。"
+
+msgid "The file was not found."
+msgstr "ファイルが見つかりません。"
+
+msgid "The text of this file was added before. Add it again?"
+msgstr "このファイルの本文は以前に追加しています。再追加しますか？"
+
+msgid "The file contains no text (e.g. a scanned PDF)."
+msgstr "本文が含まれていないファイルです ( スキャンした PDF など )。"
+
+msgid "This file type is not read (see the settings of PDF2Text)."
+msgstr "このファイル形式は読み取りません ( PDF2Text の設定を参照 )。"
+
+msgid "The file could not be read (see files/_log/pdf2text.log)."
+msgstr "ファイルを読み取れません ( files/_log/pdf2text.log で確認を )"
+
+msgid "The text was added as a followup."
+msgstr "本文をフォローとして追加しました。"
+
+#, php-format
+msgid "%d followup added"
+msgid_plural "%d followups added"
+msgstr[0] "%d 件のフォローを追加"
+
+#, php-format
+msgid "%d file was copied before"
+msgid_plural "%d files were copied before"
+msgstr[0] "以前に %d 件のファイルを追加しました"
+
+#, php-format
+msgid "%d file without text"
+msgid_plural "%d files without text"
+msgstr[0] "%d ファイルは本文がありません"
+
+#, php-format
+msgid "%d file could not be read (see files/_log/pdf2text.log)"
+msgid_plural "%d files could not be read (see files/_log/pdf2text.log)"
+msgstr[0] "%d 件のファイルを読み取れませんでした ( files/_log/pdf2text.log で確認を )"
+
+msgid "no attachments with text"
+msgstr "本文のある添付ファイルがありません"
+
+msgid "The text of this file was added before."
+msgstr "このファイルの本文は、以前に追加しています。"

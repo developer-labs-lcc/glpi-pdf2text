@@ -6,8 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.0.0
+ * @version   1.0.1
  * @created   2026-11-15
+ * @changed   2026-11-20
  */
 
 // Translations: every .po file has all texts of pdf2text.pot and its compiled .mo, GLPI loads
@@ -60,6 +61,7 @@ $expected = [
     'ru_RU'  => 'Добавить снова',
     'pl_PL'  => 'Dodaj ponownie',
     'it_IT'  => 'Aggiungi di nuovo',
+    'ja_JP'  => '再追加',
     'de_DE'  => 'Erneut hinzufügen',
     'en_US'  => 'Add again',
 ];

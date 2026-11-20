@@ -211,8 +211,11 @@ CSRF token field only on GLPI 11) and restores the settings afterwards.
 Languages: English (`en_GB`, `en_US`), German (`de_DE`), French (`fr_FR`, `fr_CA`, `fr_BE`),
 Portuguese (`pt_BR`, `pt_PT`, each translated on its own), Spanish (`es_ES`, `es_419`, `es_MX`,
 `es_AR`, `es_CO`, `es_CL`, `es_EC`, `es_VE`, one neutral text), Russian (`ru_RU`), Polish (`pl_PL`)
-and Italian (`it_IT`) – the eight languages most used with GLPI according to its telemetry. The
-words follow GLPI's own translations (e.g. French "suivi", Brazilian "acompanhamento"). A file for
+and Italian (`it_IT`) – the eight languages most used with GLPI according to its telemetry – and
+Japanese (`ja_JP`, contributed by INOUE Daisuke). The words follow GLPI's own translations (e.g.
+French "suivi", Brazilian "acompanhamento", Japanese "フォロー"); Japanese keeps the usual
+half-width spaces between Japanese and Latin text, before ":" and inside half-width brackets, as
+GLPI's Japanese translation does. A file for
 every regional variant GLPI offers is needed: for a language without a file, GLPI loads the plugin
 texts in the default language of the system (e.g. German), while its own texts follow the user's
 language. `tests/php/LocalesTest.php` checks that every file has all texts of `locales/pdf2text.pot`,
