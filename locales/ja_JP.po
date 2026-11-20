@@ -22,7 +22,7 @@ msgid "Text of the PDF attachment \"%s\""
 msgstr "「%s」PDF 添付ファイルの本文"
 
 msgid "The text was shortened. The complete text is in the attachment."
-msgstr "本文は短くしました。完全な本文は添付ファイルにしました。"
+msgstr "本文を短縮しました。完全な本文は添付ファイルにしました。"
 
 msgid "The configuration was saved."
 msgstr "構成を保存しました。"
@@ -37,10 +37,10 @@ msgid "Add the text to"
 msgstr "テキストの追加先"
 
 msgid "Private followup (only visible to technicians)"
-msgstr "非表示フォロー ( 担当技術者にのみ表示 )"
+msgstr "プライベート回答 ( 担当技術者にのみ表示 )"
 
 msgid "Maximum length of the text (characters)"
-msgstr "本文の最大の長さ ( 文字数 )"
+msgstr "本文の最大文字数"
 
 msgid "Path of pdftotext (optional)"
 msgstr "pdftotext のパス ( 任意 )"
@@ -55,7 +55,7 @@ msgstr ""
 "く維持します。"
 
 msgid "Method in use"
-msgstr "利用する方法"
+msgstr "利用する方式"
 
 msgid ""
 "When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, "
@@ -64,20 +64,20 @@ msgid ""
 "again to the same ticket adds no second followup. Scanned PDFs without a "
 "text layer are skipped."
 msgstr ""
-"PDF、Word ( DOCX ) または OpenDocument ( ODT ) ファイルをチケット、変更または"
-"問題に ( メール、フォームまたは API 経由で ) 添付すると、その本文を回答として"
-"追加します。ファイルを開かずに読んだり検索したりできるようになります。同じチ"
-"ケットに再度ファイルを添付しても、2つ目の回答を追加することはありません。ス"
-"キャンで作成した PDF のうち、テキストレイヤーのないものはスキップします。"
+"PDF、Word (docx) または OpenDocument (odt) ファイルをチケット、変更または問題"
+"に ( メール、フォームまたは API 経由で ) 添付すると、その本文を回答として追加"
+"します。ファイルを開かずに読んだり検索したりできるようになります。同じチケッ"
+"トに再度ファイルを添付しても、2つ目の回答を追加することはありません。スキャン"
+"で作成した PDF のうち、テキストレイヤーのないものはスキップします。"
 
 msgid "Read these file types"
 msgstr "読み取るファイル形式"
 
 msgid "Word (DOCX)"
-msgstr "Word ( DOCX )"
+msgstr "Word (docx)"
 
 msgid "OpenDocument text (ODT)"
-msgstr "OpenDocument テキスト ( ODT )"
+msgstr "OpenDocument テキスト (odt)"
 
 msgid ""
 "Word and OpenDocument files need the PHP extensions zip and dom, which are "
