@@ -38,14 +38,14 @@
 * Aucune notification pour le suivi ajouté, les tickets résolus ne sont pas rouverts ; le texte des fichiers de suivis ou tâches privés reste privé.
 * Paramétrable : types d'objets, types de fichiers, suivi privé, longueur maximale, chemin de pdftotext.
 * Les PDF numérisés sans couche texte sont ignorés (pas d'OCR).]]></fr>
-         <ja><![CDATA[PDF、Word（DOCX）、OpenDocument（ODT）ファイルをチケット、変更、問題に（メールコレクター、フォーム、API経由で）添付すると、**PDF2Text** はその本文を回答をとして追加します（デフォルトでプライベート）。ファイルを開かずにタイムラインで内容を確認でき、検索（「回答 > 説明」）にもヒットします。
+         <ja><![CDATA[PDF、Word（DOCX）、OpenDocument（ODT）ファイルをチケット、変更、問題に（メールコレクター、フォーム、API経由で）添付すると、**PDF2Text** はその本文をフォローとして追加します（デフォルトで非公開）。ファイルを開かずにタイムラインで内容を確認でき、検索（「フォロー > 詳細」）にもヒットします。
 
-* メールコレクター経由の新規チケット、返信メール、回答・タスク・解決・承認への添付ファイルにも対応。
+* メールコレクター経由の新規チケット、返信メール、フォロー・タスク・解決・承認への添付ファイルにも対応。
 * Word や OpenDocument は見出し・リスト・表を保持、PDFは poppler-utils の pdftotext があれば表や囲みも維持、それ以外は同梱の PHP パーサーで解析します。
-* 同じファイルを再度添付しても（例：返信メールで引用）2回目の回答を追加しません。
+* 同じファイルを再度添付しても（例：返信メールで引用）2回目のフォローを追加しません。
 * 既存の添付ファイルにはタイムラインの各添付にボタン、一覧での一括処理、コンソールコマンドで対応可能。
-* 追加した回答に通知は行われず、解決済みチケットも再開しません。プライベートの回答やタスクのファイル本文も非公開のままです。
-* 対象アイテム種別、ファイル種別、プライベートな回答、最大長、pdftotextのパスなど設定可能。
+* 追加したフォローに通知は行われず、解決済みチケットも再開しません。非公開のフォローやタスクのファイル本文も非公開のままです。
+* 対象アイテム種別、ファイル種別、非公開のフォロー、最大長、pdftotextのパスなど設定可能。
 * テキスト層のない、スキャンした PDF は対象外（ OCR は行いません）。]]></ja>
       </long>
    </description>
@@ -116,13 +116,13 @@
          <tag>Recherche</tag>
          <tag>Assistance</tag>
       </fr>
-      <en>
+      <ja>
          <tag>PDF</tag>
          <tag>添付ファイル</tag>
          <tag>メールコレクター</tag>
          <tag>検索</tag>
          <tag>サポート</tag>
-      </en>
+      </ja>
    </tags>
    <screenshots>
       <screenshot>https://raw.githubusercontent.com/developer-labs-lcc/glpi-pdf2text/main/pics/screenshots/1-pdf-text-followup.png</screenshot>
