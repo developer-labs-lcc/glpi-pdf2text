@@ -6,9 +6,9 @@
  * @link      https://developer-labs.com/en/glpi-development/
  * @copyright Developer Labs LLC
  * @license   GPL-3.0-or-later – see LICENSE
- * @version   1.3.0
+ * @version   1.3.1
  * @created   2026-10-22
- * @changed   2026-11-19
+ * @changed   2026-11-20
  */
 
 use Glpi\Plugin\Hooks;
@@ -20,7 +20,7 @@ use GlpiPlugin\Pdf2text\ProcessedFiles;
 use function Safe\filemtime;
 
 /** @phpstan-ignore theCodingMachineSafe.function (safe to assume this isn't already defined) */
-define('PLUGIN_PDF2TEXT_VERSION', '1.0.1');
+define('PLUGIN_PDF2TEXT_VERSION', '1.0.2');
 
 // Minimal GLPI version, inclusive. No upper bound on purpose (tested with GLPI 11 and 12).
 /** @phpstan-ignore theCodingMachineSafe.function (safe to assume this isn't already defined) */
