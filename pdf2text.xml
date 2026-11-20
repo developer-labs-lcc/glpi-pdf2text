@@ -8,6 +8,7 @@
          <en>Copies the text of PDF, Word and OpenDocument attachments into tickets, changes and problems, so it can be read and searched.</en>
          <de>Kopiert den Text von PDF-, Word- und OpenDocument-Anhängen in Tickets, Changes und Problems, damit er lesbar und durchsuchbar ist.</de>
          <fr>Copie le texte des pièces jointes PDF, Word et OpenDocument dans les tickets, changements et problèmes, pour le lire et le rechercher.</fr>
+         <ja>PDF、Word、OpenDocument のファイルを添付すると、その本文をそのチケット・変更・問題に追加します。読むのにも検索するのにも便利です。</ja>
       </short>
       <long>
          <en><![CDATA[When a PDF, Word (DOCX) or OpenDocument (ODT) file is attached to a ticket, change or problem – by the mail collector, the form or the API – **PDF2Text** adds its text as a followup (private by default). The text can be read in the timeline without opening the file and is found by the search (*Followups > Description*).
@@ -37,6 +38,15 @@
 * Aucune notification pour le suivi ajouté, les tickets résolus ne sont pas rouverts ; le texte des fichiers de suivis ou tâches privés reste privé.
 * Paramétrable : types d'objets, types de fichiers, suivi privé, longueur maximale, chemin de pdftotext.
 * Les PDF numérisés sans couche texte sont ignorés (pas d'OCR).]]></fr>
+         <ja><![CDATA[PDF、Word（DOCX）、OpenDocument（ODT）ファイルをチケット、変更、問題に（メールコレクター、フォーム、API経由で）添付すると、**PDF2Text** はその本文を回答をとして追加します（デフォルトでプライベート）。ファイルを開かずにタイムラインで内容を確認でき、検索（「回答 > 説明」）にもヒットします。
+
+* メールコレクター経由の新規チケット、返信メール、回答・タスク・解決・承認への添付ファイルにも対応。
+* Word や OpenDocument は見出し・リスト・表を保持、PDFは poppler-utils の pdftotext があれば表や囲みも維持、それ以外は同梱の PHP パーサーで解析します。
+* 同じファイルを再度添付しても（例：返信メールで引用）2回目の回答を追加しません。
+* 既存の添付ファイルにはタイムラインの各添付にボタン、一覧での一括処理、コンソールコマンドで対応可能。
+* 追加した回答に通知は行われず、解決済みチケットも再開しません。プライベートの回答やタスクのファイル本文も非公開のままです。
+* 対象アイテム種別、ファイル種別、プライベートな回答、最大長、pdftotextのパスなど設定可能。
+* テキスト層のない、スキャンした PDF は対象外（ OCR は行いません）。]]></ja>
       </long>
    </description>
    <homepage>https://github.com/developer-labs-lcc/glpi-pdf2text</homepage>
@@ -77,6 +87,7 @@
       <lang>fr_CA</lang>
       <lang>fr_FR</lang>
       <lang>it_IT</lang>
+      <lang>ja_JP</lang>
       <lang>pl_PL</lang>
       <lang>pt_BR</lang>
       <lang>pt_PT</lang>
@@ -105,6 +116,13 @@
          <tag>Recherche</tag>
          <tag>Assistance</tag>
       </fr>
+      <en>
+         <tag>PDF</tag>
+         <tag>添付ファイル</tag>
+         <tag>メールコレクター</tag>
+         <tag>検索</tag>
+         <tag>サポート</tag>
+      </en>
    </tags>
    <screenshots>
       <screenshot>https://raw.githubusercontent.com/developer-labs-lcc/glpi-pdf2text/main/pics/screenshots/1-pdf-text-followup.png</screenshot>
